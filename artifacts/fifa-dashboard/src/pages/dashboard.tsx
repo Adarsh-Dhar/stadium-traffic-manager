@@ -1,12 +1,6 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Trophy, Zap, Users, TrendingUp, Target, Clock, CheckCircle2, AlertCircle } from "lucide-react";
-import {
-  useGetCurrentMetrics,
-  useGetStadiumCapacity,
-  useGetAlerts,
-  useScaleServer,
-} from "@workspace/api-client-react";
+import { Trophy, Zap, Users, TrendingUp, Target, Clock, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,36 +9,111 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
-const TEAMS = [
-  { name: "Argentina", flag: "🇦🇷", wins: 3, goals: 12 },
-  { name: "France", flag: "🇫🇷", wins: 2, goals: 8 },
-  { name: "Brazil", flag: "🇧🇷", wins: 3, goals: 14 },
-  { name: "England", flag: "🇬🇧", wins: 2, goals: 9 },
-  { name: "Spain", flag: "🇪🇸", wins: 2, goals: 10 },
-  { name: "Germany", flag: "🇩🇪", wins: 1, goals: 6 },
-];
+const API_BASE = "http://localhost:5000";
 
-const UPCOMING_MATCHES = [
-  { team1: "Argentina", flag1: "🇦🇷", team2: "France", flag2: "🇫🇷", time: "Today 8:00 PM", stadium: "MetLife Stadium" },
-  { team1: "Brazil", flag1: "🇧🇷", team2: "Germany", flag2: "🇩🇪", time: "Tomorrow 7:00 PM", stadium: "SoFi Stadium" },
-  { team1: "Spain", flag1: "🇪🇸", team2: "England", flag2: "🇬🇧", time: "in 2 days", stadium: "AT&T Stadium" },
-];
+interface Match {
+  fixture: {
+    id: number;
+    date: string;
+    status: string;
+  };
+  teams: {
+    home: { id: number; name: string; logo: string };
+    away: { id: number; name: string; logo: string };
+  };
+  goals: {
+    home: number | null;
+    away: number | null;
+  };
+}
+
+interface TeamStanding {
+  rank: number;
+  team: { id: number; name: string; logo: string };
+  points: number;
+  goalsDiff: number;
+  goals: { for: number; against: number };
+}
+
+interface TournamentInfo {
+  league: {
+    id: number;
+    name: string;
+    logo: string;
+    season: number;
+  };
+}
 
 export default function Dashboard() {
   const { toast } = useToast();
+  const [upcomingMatches, setUpcomingMatches] = useState<Match[]>([]);
+  const [liveMatches, setLiveMatches] = useState<Match[]>([]);
+  const [standings, setStandings] = useState<TeamStanding[]>([]);
+  const [tournamentInfo, setTournamentInfo] = useState<TournamentInfo | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Data Polling
-  const { data: metrics } = useGetCurrentMetrics({ query: { refetchInterval: 2000 } });
-  const { data: capacity } = useGetStadiumCapacity({ query: { refetchInterval: 3000 } });
-  const { data: alerts } = useGetAlerts({ query: { refetchInterval: 3000 } });
+  useEffect(() => {
+    const fetchWorldCupData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
 
-  const scaleServer = useScaleServer();
+        // Fetch upcoming matches
+        const upcomingRes = await fetch(`${API_BASE}/api/fifa/worldcup/upcoming`);
+        if (upcomingRes.ok) {
+          const upcomingData = await upcomingRes.json();
+          setUpcomingMatches(upcomingData.response || []);
+        }
 
-  // Map metrics to tournament data
-  const attendancePercentage = metrics ? (metrics.cpuUsage || 0) : 0;
-  const ticketsSold = Math.round((attendancePercentage / 100) * 75000);
-  const averageEngagement = metrics ? Math.round(metrics.memoryUsage || 0) : 0;
-  const atmosphereScore = metrics ? Math.round(metrics.errorRate ? 100 - metrics.errorRate * 10 : 95) : 95;
+        // Fetch live matches
+        const liveRes = await fetch(`${API_BASE}/api/fifa/worldcup/live`);
+        if (liveRes.ok) {
+          const liveData = await liveRes.json();
+          setLiveMatches(liveData.response || []);
+        }
+
+        // Fetch standings
+        const standingsRes = await fetch(`${API_BASE}/api/fifa/worldcup/standings`);
+        if (standingsRes.ok) {
+          const standingsData = await standingsRes.json();
+          const allStandings: TeamStanding[] = [];
+          if (standingsData.response && Array.isArray(standingsData.response)) {
+            standingsData.response.forEach((group: any) => {
+              if (group.standings && Array.isArray(group.standings[0])) {
+                allStandings.push(...group.standings[0]);
+              }
+            });
+          }
+          setStandings(allStandings.slice(0, 8));
+        }
+
+        // Fetch tournament info
+        const tournamentRes = await fetch(`${API_BASE}/api/fifa/worldcup/tournament`);
+        if (tournamentRes.ok) {
+          const tournamentData = await tournamentRes.json();
+          if (tournamentData.response && tournamentData.response[0]) {
+            setTournamentInfo(tournamentData.response[0]);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching World Cup data:", err);
+        setError("Failed to load World Cup data");
+        toast({
+          title: "Error",
+          description: "Failed to fetch World Cup data. Please check your API key.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchWorldCupData();
+    // Refresh data every 30 seconds
+    const interval = setInterval(fetchWorldCupData, 30000);
+    return () => clearInterval(interval);
+  }, [toast]);
 
   return (
     <div className="flex flex-col gap-6 w-full max-w-[1600px] mx-auto pb-10">
@@ -71,185 +140,134 @@ export default function Dashboard() {
         </div>
       </motion.div>
 
-      {/* Key Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-          <Card className="border-border/50 bg-card/50 hover:bg-card/80 transition-colors">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase">Stadium Fill</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="text-3xl font-bold text-primary">{attendancePercentage.toFixed(0)}%</div>
-              <Progress value={attendancePercentage} className="h-2 bg-card border border-border/50" />
-              <div className="text-xs text-muted-foreground">{ticketsSold.toLocaleString()} / 75,000 capacity</div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-          <Card className="border-border/50 bg-card/50 hover:bg-card/80 transition-colors">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase">Fan Engagement</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="text-3xl font-bold text-secondary">{averageEngagement}%</div>
-              <Progress value={averageEngagement} className="h-2 bg-card border border-border/50" />
-              <div className="text-xs text-muted-foreground">Real-time crowd energy level</div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-          <Card className="border-border/50 bg-card/50 hover:bg-card/80 transition-colors">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase">Stadium Atmosphere</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="text-3xl font-bold text-accent">{atmosphereScore}/100</div>
-              <Progress value={atmosphereScore} className="h-2 bg-card border border-border/50" />
-              <div className="text-xs text-muted-foreground">Match day experience rating</div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
-          <Card className="border-border/50 bg-card/50 hover:bg-card/80 transition-colors">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase">System Status</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
+      {/* Live Matches Section */}
+      {liveMatches.length > 0 && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
+          <Card className="border-primary/50 bg-card/50 hover:bg-card/80 transition-colors">
+            <CardHeader>
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-success animate-pulse"></div>
-                <span className="text-sm font-semibold text-success">All Systems</span>
+                <div className="h-3 w-3 bg-red-500 rounded-full animate-pulse"></div>
+                <CardTitle>LIVE MATCHES</CardTitle>
               </div>
-              <div className="text-xs text-muted-foreground">Operating at peak capacity</div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {liveMatches.map((match) => (
+                  <div key={match.fixture.id} className="flex items-center justify-between p-4 rounded-lg bg-card border border-border/50">
+                    <div className="text-sm font-semibold text-primary">{match.teams.home.name}</div>
+                    <div className="text-2xl font-black text-foreground">
+                      {match.goals.home ?? '-'} - {match.goals.away ?? '-'}
+                    </div>
+                    <div className="text-sm font-semibold text-primary">{match.teams.away.name}</div>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         </motion.div>
-      </div>
+      )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Upcoming Matches */}
-        <div className="lg:col-span-2 space-y-4">
-          <h3 className="text-lg font-bold uppercase tracking-wider text-foreground">Upcoming Matches</h3>
-          
-          {UPCOMING_MATCHES.map((match, idx) => (
-            <motion.div
-              key={idx}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: idx * 0.1 }}
-            >
-              <Card className="border-border/50 bg-gradient-to-r from-card via-card to-secondary/10 overflow-hidden hover:border-primary/30 transition-colors">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex flex-col gap-1">
-                      <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">{match.stadium}</div>
-                      <div className="text-sm text-accent uppercase tracking-wider font-bold flex items-center gap-2">
-                        <Clock className="h-4 w-4" /> {match.time}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 md:gap-6 flex-1 justify-center">
-                      <div className="text-center">
-                        <div className="text-4xl mb-1">{match.flag1}</div>
-                        <div className="text-xs font-bold text-foreground">{match.team1}</div>
-                      </div>
-                      <div className="text-center px-3">
-                        <div className="text-xs font-bold text-muted-foreground uppercase">vs</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-4xl mb-1">{match.flag2}</div>
-                        <div className="text-xs font-bold text-foreground">{match.team2}</div>
-                      </div>
-                    </div>
-                    <Button 
-                      size="sm" 
-                      className="ml-auto bg-accent hover:bg-accent/80 text-accent-foreground uppercase text-xs font-bold"
-                    >
-                      View Details
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
+      {/* Loading State */}
+      {loading && (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <span className="ml-2 text-muted-foreground">Loading World Cup data...</span>
         </div>
+      )}
 
-        {/* Live Alerts & Events */}
-        <div>
-          <h3 className="text-lg font-bold uppercase tracking-wider text-foreground mb-4">Match Events</h3>
-          <Card className="border-border/50 bg-card/50 h-full">
-            <ScrollArea className="h-[400px]">
-              <div className="p-4 space-y-3">
-                {!alerts || !Array.isArray(alerts) || alerts.length === 0 ? (
-                  <div className="flex items-center justify-center h-40 text-muted-foreground text-xs font-mono uppercase">
-                    No active events
+      {/* Upcoming Matches Section */}
+      {!loading && upcomingMatches.length > 0 && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
+          <Card className="border-border/50 bg-card/50 hover:bg-card/80 transition-colors">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5 text-accent" />
+                UPCOMING MATCHES
+              </CardTitle>
+              <CardDescription>Next fixtures in the tournament</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {upcomingMatches.slice(0, 6).map((match) => (
+                  <div key={match.fixture.id} className="p-4 rounded-lg bg-secondary/20 border border-secondary/50 hover:border-primary/50 transition-colors">
+                    <div className="text-xs text-muted-foreground mb-2">
+                      {new Date(match.fixture.date).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-semibold">{match.teams.home.name}</div>
+                      <div className="text-xs text-muted-foreground">vs</div>
+                      <div className="text-sm font-semibold">{match.teams.away.name}</div>
+                    </div>
                   </div>
-                ) : (
-                  <AnimatePresence initial={false}>
-                    {Array.isArray(alerts) && alerts.map((alert) => (
-                      <motion.div
-                        key={alert.id}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 20 }}
-                        className={cn(
-                          "p-3 rounded-lg border text-xs space-y-1",
-                          alert.severity === "critical" && "bg-red-500/10 border-red-500/30",
-                          alert.severity === "warning" && "bg-yellow-500/10 border-yellow-500/30",
-                          alert.severity === "info" && "bg-blue-500/10 border-primary/30",
-                        )}
-                      >
-                        <div className="flex items-start gap-2">
-                          {alert.severity === "critical" && <AlertCircle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />}
-                          {alert.severity === "warning" && <AlertCircle className="h-4 w-4 text-yellow-400 shrink-0 mt-0.5" />}
-                          {alert.severity === "info" && <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />}
-                          <span className="font-mono font-semibold text-foreground">{alert.type}</span>
-                        </div>
-                        <div className="text-muted-foreground line-clamp-2">{alert.message}</div>
-                        <div className="text-[10px] text-muted-foreground/50 font-mono">{new Date(alert.timestamp).toLocaleTimeString()}</div>
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
-                )}
+                ))}
               </div>
-            </ScrollArea>
+            </CardContent>
           </Card>
-        </div>
-      </div>
+        </motion.div>
+      )}
 
-      {/* Top Teams Standings */}
-      <div>
-        <h3 className="text-lg font-bold uppercase tracking-wider text-foreground mb-4">Tournament Leaders</h3>
-        <Card className="border-border/50 bg-card/50">
-          <CardContent className="p-0">
-            <div className="divide-y divide-border/30">
-              {TEAMS.map((team, idx) => (
-                <motion.div
-                  key={team.name}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: idx * 0.05 }}
-                  className="p-4 flex items-center justify-between hover:bg-primary/5 transition-colors group"
-                >
-                  <div className="flex items-center gap-3 flex-1">
-                    <div className="text-2xl">{team.flag}</div>
-                    <div className="flex-1">
-                      <div className="font-bold text-sm text-foreground">{team.name}</div>
-                      <div className="text-xs text-muted-foreground">{team.wins} wins • {team.goals} goals</div>
+      {/* Tournament Standings */}
+      {!loading && standings.length > 0 && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}>
+          <Card className="border-border/50 bg-card/50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Trophy className="h-5 w-5 text-primary" />
+                TOURNAMENT STANDINGS
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="w-full">
+                <div className="space-y-2">
+                  {standings.map((team, idx) => (
+                    <div key={team.team.id} className="flex items-center justify-between p-3 rounded-lg bg-card/50 hover:bg-card/80 transition-colors border border-border/30">
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-bold text-primary w-6">{team.rank}</span>
+                        <div className="flex items-center gap-2">
+                          {team.team.logo && (
+                            <img src={team.team.logo} alt={team.team.name} className="h-6 w-6 rounded-full" />
+                          )}
+                          <span className="text-sm font-semibold">{team.team.name}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 text-xs">
+                        <span className="text-muted-foreground">G: {team.goals.for}-{team.goals.against}</span>
+                        <span className="font-bold text-primary">{team.points} pts</span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 text-right">
-                    <TrendingUp className="h-4 w-4 text-secondary opacity-0 group-hover:opacity-100 transition-opacity" />
-                    <span className="font-bold text-lg text-primary">{team.wins * 3 + Math.random() * 10 | 0}</span>
-                    <span className="text-xs text-muted-foreground">pts</span>
-                  </div>
-                </motion.div>
-              ))}
+                  ))}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
+      {/* Error State */}
+      {error && (
+        <Card className="border-red-500/50 bg-red-500/10">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-red-500">
+              <AlertCircle className="h-5 w-5" />
+              <span>{error}</span>
             </div>
           </CardContent>
         </Card>
-      </div>
+      )}
+
+      {/* No Data Message */}
+      {!loading && upcomingMatches.length === 0 && !error && (
+        <Card className="border-border/50 bg-card/50">
+          <CardContent className="pt-6 text-center text-muted-foreground">
+            <p>No match data available yet. Please ensure your API_FOOTBALL_KEY is configured correctly.</p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
