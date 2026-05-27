@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Trophy, Zap, Activity, Play, BarChart3, Box } from "lucide-react";
+import { Trophy, Zap, Activity, Play, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface LayoutProps {
@@ -17,6 +17,7 @@ export function Layout({ children }: LayoutProps) {
 
   const navItems = [
     { href: "/", label: "Live Updates", icon: Zap },
+    { href: "/worldcup", label: "WC 2026", icon: Trophy },
     { href: "/simulation", label: "Match Sim", icon: Play },
     { href: "/metrics", label: "Stats", icon: BarChart3 },
   ];

@@ -244,4 +244,28 @@ router.get("/worldcup/match/:id/stats", async (req, res): Promise<void> => {
   }
 });
 
+// GET /worldcup/group/:name - Get group standings and matches
+router.get("/worldcup/group/:name", async (req, res): Promise<void> => {
+  try {
+    const groupName = req.params.name;
+    const data = await apiFootball.getGroupStandingsWithMatches(groupName);
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch group standings" });
+  }
+});
+
+// GET /worldcup/bracket - Get knockout stage matches
+router.get("/worldcup/bracket", async (_req, res): Promise<void> => {
+  try {
+    const allMatches = await apiFootball.getWorldCupMatches();
+    const knockoutMatches = allMatches.matches.filter(
+      (m: any) => m.stage !== 'GROUP_STAGE'
+    );
+    res.json({ matches: knockoutMatches });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch bracket" });
+  }
+});
+
 export default router;
