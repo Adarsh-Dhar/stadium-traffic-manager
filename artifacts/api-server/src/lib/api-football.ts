@@ -41,10 +41,10 @@ async function fetchFromAPIFootball(endpoint: string, options: FetchOptions = {}
   }
 }
 
-// Get current fixtures/matches for World Cup 2026
+// Get current fixtures/matches (using Premier League as demo since World Cup 2026 not available in free tier)
 export async function getWorldCupMatches(status?: 'live' | 'upcoming' | 'finished') {
-  const leagueId = 1; // FIFA World Cup
-  const season = 2026;
+  const leagueId = 39; // English Premier League (has live data)
+  const season = 2024;
   
   let endpoint = `/fixtures?league=${leagueId}&season=${season}`;
   if (status) {
@@ -54,10 +54,10 @@ export async function getWorldCupMatches(status?: 'live' | 'upcoming' | 'finishe
   return fetchFromAPIFootball(endpoint);
 }
 
-// Get standings/table for World Cup
+// Get standings/table
 export async function getWorldCupStandings() {
-  const leagueId = 1; // FIFA World Cup
-  const season = 2026;
+  const leagueId = 39; // English Premier League
+  const season = 2024;
   
   return fetchFromAPIFootball(`/standings?league=${leagueId}&season=${season}`);
 }
@@ -69,11 +69,11 @@ export async function getTeamInfo(teamId: number) {
 
 // Get upcoming matches (next N matches)
 export async function getUpcomingMatches(limit: number = 10) {
-  const leagueId = 1;
-  const season = 2026;
+  const leagueId = 39;
+  const season = 2024;
   
   const response = await fetchFromAPIFootball(
-    `/fixtures?league=${leagueId}&season=${season}&status=upcoming&sort=date_asc`
+    `/fixtures?league=${leagueId}&season=${season}&status=upcoming`
   );
   
   // Return only the requested number of matches
@@ -89,15 +89,13 @@ export async function getUpcomingMatches(limit: number = 10) {
 
 // Get live matches
 export async function getLiveMatches() {
-  const leagueId = 1;
-  
-  return fetchFromAPIFootball(`/fixtures?league=${leagueId}&status=live`);
+  return fetchFromAPIFootball(`/fixtures?status=live&timezone=UTC`);
 }
 
 // Get tournament info
 export async function getTournamentInfo() {
-  const leagueId = 1;
-  const season = 2026;
+  const leagueId = 39;
+  const season = 2024;
   
   return fetchFromAPIFootball(`/leagues?id=${leagueId}&season=${season}`);
 }
