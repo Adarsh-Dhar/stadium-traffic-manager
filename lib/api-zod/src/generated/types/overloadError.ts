@@ -5,7 +5,9 @@
  * FIFA World Cup Stadium AI Traffic Management API
  * OpenAPI spec version: 0.1.0
  */
+import type { SystemMetrics } from './systemMetrics';
 
-export interface HealthStatus {
-  status: string;
+export interface OverloadError {
+  error: string;
+  metrics?: SystemMetrics;
 }

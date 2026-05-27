@@ -3,13 +3,23 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: FIFA World Cup Stadium AI Traffic Management API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: tickets
+    description: Ticket validation and scanning
+  - name: stadium
+    description: Stadium capacity and status
+  - name: metrics
+    description: System performance metrics
+  - name: admin
+    description: Admin and scaling operations
+  - name: simulation
+    description: Load simulation controls
 paths:
   /healthz:
     get:
@@ -24,6 +34,203 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /ticket/validate:
+    post:
+      operationId: validateTicket
+      tags: [tickets]
+      summary: Validate a ticket QR code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TicketInput"
+      responses:
+        "200":
+          description: Ticket valid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketValidationResult"
+        "401":
+          description: Invalid ticket
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketValidationResult"
+        "503":
+          description: Service overloaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OverloadError"
+
+  /ticket/scan:
+    post:
+      operationId: scanTicket
+      tags: [tickets]
+      summary: Process stadium entry scan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScanInput"
+      responses:
+        "200":
+          description: Entry processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScanResult"
+
+  /stadium/capacity:
+    get:
+      operationId: getStadiumCapacity
+      tags: [stadium]
+      summary: Get current stadium occupancy
+      responses:
+        "200":
+          description: Stadium capacity info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StadiumCapacity"
+
+  /metrics/current:
+    get:
+      operationId: getCurrentMetrics
+      tags: [metrics]
+      summary: Get current system performance metrics
+      responses:
+        "200":
+          description: Current metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemMetrics"
+
+  /metrics/history:
+    get:
+      operationId: getMetricsHistory
+      tags: [metrics]
+      summary: Get recent metrics history for charting
+      responses:
+        "200":
+          description: Metrics history array
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MetricsSnapshot"
+
+  /metrics/alerts:
+    get:
+      operationId: getAlerts
+      tags: [metrics]
+      summary: Get active system alerts and AI recommendations
+      responses:
+        "200":
+          description: Active alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Alert"
+
+  /admin/scale:
+    post:
+      operationId: scaleServer
+      tags: [admin]
+      summary: Manually scale server capacity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScaleInput"
+      responses:
+        "200":
+          description: Scale action applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScaleResult"
+
+  /admin/reset:
+    post:
+      operationId: resetSystem
+      tags: [admin]
+      summary: Reset all metrics and simulation state
+      responses:
+        "200":
+          description: System reset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResetResult"
+
+  /admin/ai-analyze:
+    post:
+      operationId: aiAnalyze
+      tags: [admin]
+      summary: Trigger AI analysis and auto-healing
+      responses:
+        "200":
+          description: AI analysis result with recommended actions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiAnalysisResult"
+
+  /simulation/start:
+    post:
+      operationId: startSimulation
+      tags: [simulation]
+      summary: Start a crowd surge simulation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SimulationConfig"
+      responses:
+        "200":
+          description: Simulation started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimulationStatus"
+
+  /simulation/stop:
+    post:
+      operationId: stopSimulation
+      tags: [simulation]
+      summary: Stop the running simulation
+      responses:
+        "200":
+          description: Simulation stopped
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimulationStatus"
+
+  /simulation/status:
+    get:
+      operationId: getSimulationStatus
+      tags: [simulation]
+      summary: Get current simulation status and load stage
+      responses:
+        "200":
+          description: Simulation status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimulationStatus"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +241,213 @@ components:
       required:
         - status
 
+    TicketInput:
+      type: object
+      required: [ticketId, userId]
+      properties:
+        ticketId:
+          type: string
+        userId:
+          type: string
+
+    ScanInput:
+      type: object
+      required: [ticketId, gate]
+      properties:
+        ticketId:
+          type: string
+        gate:
+          type: string
+
+    ScaleInput:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [add-server, remove-server]
+
+    SimulationConfig:
+      type: object
+      properties:
+        intensity:
+          type: string
+          enum: [low, medium, high, surge]
+        durationSeconds:
+          type: integer
+
+    TicketValidationResult:
+      type: object
+      required: [valid, processingTime]
+      properties:
+        valid:
+          type: boolean
+        processingTime:
+          type: integer
+        metrics:
+          $ref: "#/components/schemas/SystemMetrics"
+        error:
+          type: ["string", "null"]
+
+    ScanResult:
+      type: object
+      required: [success, gate, entryTime]
+      properties:
+        success:
+          type: boolean
+        gate:
+          type: string
+        entryTime:
+          type: string
+        totalEntered:
+          type: integer
+
+    StadiumCapacity:
+      type: object
+      required: [totalCapacity, currentOccupancy, occupancyPercent, gates]
+      properties:
+        totalCapacity:
+          type: integer
+        currentOccupancy:
+          type: integer
+        occupancyPercent:
+          type: number
+        gates:
+          type: array
+          items:
+            $ref: "#/components/schemas/GateStatus"
+
+    GateStatus:
+      type: object
+      required: [id, name, status, throughput]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum: [open, congested, closed]
+        throughput:
+          type: integer
+
+    SystemMetrics:
+      type: object
+      required: [avgLatency, cpuUsage, memoryUsage, activeServers, requestsPerSecond, errorRate]
+      properties:
+        avgLatency:
+          type: number
+        cpuUsage:
+          type: number
+        memoryUsage:
+          type: number
+        activeServers:
+          type: integer
+        requestsPerSecond:
+          type: number
+        errorRate:
+          type: number
+        totalRequests:
+          type: integer
+
+    MetricsSnapshot:
+      type: object
+      required: [timestamp, avgLatency, cpuUsage, memoryUsage, requestsPerSecond, activeServers]
+      properties:
+        timestamp:
+          type: integer
+        avgLatency:
+          type: number
+        cpuUsage:
+          type: number
+        memoryUsage:
+          type: number
+        requestsPerSecond:
+          type: number
+        activeServers:
+          type: integer
+        errorRate:
+          type: number
+
+    Alert:
+      type: object
+      required: [id, severity, title, message, timestamp]
+      properties:
+        id:
+          type: string
+        severity:
+          type: string
+          enum: [info, warning, critical]
+        title:
+          type: string
+        message:
+          type: string
+        timestamp:
+          type: integer
+        resolved:
+          type: boolean
+        aiAction:
+          type: ["string", "null"]
+
+    ScaleResult:
+      type: object
+      required: [success, activeServers]
+      properties:
+        success:
+          type: boolean
+        activeServers:
+          type: integer
+        metrics:
+          $ref: "#/components/schemas/SystemMetrics"
+
+    ResetResult:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+
+    AiAnalysisResult:
+      type: object
+      required: [status, analysis, actions, confidence]
+      properties:
+        status:
+          type: string
+        analysis:
+          type: string
+        actions:
+          type: array
+          items:
+            type: string
+        confidence:
+          type: number
+        serversAdded:
+          type: integer
+        metricsAfter:
+          $ref: "#/components/schemas/SystemMetrics"
+
+    SimulationStatus:
+      type: object
+      required: [running, stage, intensity, elapsedSeconds, virtualUsers]
+      properties:
+        running:
+          type: boolean
+        stage:
+          type: string
+        intensity:
+          type: ["string", "null"]
+        elapsedSeconds:
+          type: integer
+        virtualUsers:
+          type: integer
+        nextStage:
+          type: ["string", "null"]
+
+    OverloadError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        metrics:
+          $ref: "#/components/schemas/SystemMetrics"

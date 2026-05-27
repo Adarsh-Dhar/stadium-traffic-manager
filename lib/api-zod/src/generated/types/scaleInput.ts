@@ -5,7 +5,8 @@
  * FIFA World Cup Stadium AI Traffic Management API
  * OpenAPI spec version: 0.1.0
  */
+import type { ScaleInputAction } from './scaleInputAction';
 
-export interface HealthStatus {
-  status: string;
+export interface ScaleInput {
+  action: ScaleInputAction;
 }

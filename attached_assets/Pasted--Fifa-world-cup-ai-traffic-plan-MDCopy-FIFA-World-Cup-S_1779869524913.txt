@@ -1,0 +1,992 @@
+Fifa world cup ai traffic plan · MDCopyFIFA World Cup Stadium AI Traffic Management System
+Complete Implementation Plan
+
+Executive Overview
+Project Goal: Build an automated AI system that monitors FIFA stadium ticketing systems and self-heals during massive crowd surges (80,000+ simultaneous users).
+Core Loop:
+Crowd Surge → Dynatrace Detects Bottleneck → AI Analyzes → Auto-Scale Servers
+Timeline: 4-6 weeks for a fully functional prototype
+Team: 1-2 engineers (full-stack), 1 DevOps engineer (optional)
+
+Phase 1: Foundation Setup (Week 1)
+1.1 Development Environment
+Duration: 1 day
+Machine Requirements
+
+Local Dev Machine: 8GB RAM minimum, 10GB free disk space
+Cloud Account: AWS Free Tier or GCP Free Tier (for optional scaling demo)
+Tools to Install:
+
+Node.js 18+ (for API and server)
+Python 3.9+ (for utilities)
+Docker (for containerization)
+Git (for version control)
+curl/Postman (for API testing)
+
+
+
+Installation Checklist
+bash# Verify installations
+node --version           # Should be v18+
+npm --version           # Should be 8+
+python --version        # Should be 3.9+
+docker --version        # Should be 20+
+git --version          # Should be 2.3+
+1.2 Project Repository Structure
+Duration: 2 hours
+Create organized folder hierarchy:
+fifa-ai-traffic-system/
+├── api-server/                 # Fake ticketing API
+│   ├── src/
+│   │   ├── app.js             # Main Express server
+│   │   ├── routes.js          # Ticketing endpoints
+│   │   └── metrics.js         # Performance tracking
+│   ├── package.json
+│   ├── Dockerfile
+│   └── README.md
+│
+├── load-testing/               # K6 load test scripts
+│   ├── crowd-surge.js         # Main load test
+│   ├── config.js              # Test parameters
+│   └── README.md
+│
+├── dynatrace-setup/            # Dynatrace configuration
+│   ├── docker-compose.yml     # Local setup (optional)
+│   ├── api-token.example      # Token template
+│   └── README.md
+│
+├── mcp-server/                # Dynatrace MCP bridge
+│   ├── config.json            # MCP configuration
+│   └── README.md
+│
+├── ai-agent/                  # Claude AI orchestrator
+│   ├── agent.js               # Main AI logic
+│   ├── dynatrace-client.js    # API wrapper
+│   ├── actions.js             # Auto-fix procedures
+│   └── README.md
+│
+├── docker-compose.yml         # Full system orchestration
+├── .env.example               # Environment variables
+└── docs/
+    ├── architecture.md
+    ├── setup-guide.md
+    └── demo-script.md
+1.3 Environment Variables Template
+Duration: 30 minutes
+Create .env.example:
+env# API Server
+API_PORT=3000
+API_ENV=development
+SIMULATE_LATENCY=true
+CRASH_THRESHOLD=5000  # requests per second
+
+# Dynatrace
+DYNATRACE_ENV_ID=your-env-id
+DYNATRACE_API_TOKEN=your-api-token
+DYNATRACE_CLUSTER_URL=https://your-cluster.dynatrace.com
+DYNATRACE_MCP_PORT=8000
+
+# Load Testing
+K6_VUS=100             # Virtual users
+K6_DURATION=60s        # Test duration
+K6_RPS_TARGET=2000     # Requests per second
+
+# AI Agent
+CLAUDE_API_KEY=your-api-key
+AGENT_CHECK_INTERVAL=5000  # ms
+AUTO_FIX_ENABLED=true
+
+Phase 2: Fake Ticketing API (Week 1-2)
+2.1 API Design
+Core Endpoints:
+MethodEndpointPurposeBehaviorPOST/api/ticket/validateValidate QR code50ms baselinePOST/api/ticket/scanProcess entry100ms baselineGET/api/stadium/capacityCheck occupancy10ms responseGET/healthHealth checkAlways 200msPOST/api/admin/scaleManual scalingAdds compute
+2.2 Implementation: Express.js API
+File: api-server/src/app.js
+javascriptconst express = require('express');
+const app = express();
+app.use(express.json());
+
+// Global metrics
+let requestCount = 0;
+let avgLatency = 50;
+let cpuUsage = 20;
+let memoryUsage = 30;
+let activeServers = 1;
+
+// Simulated database of valid tickets
+const validTickets = new Set();
+for (let i = 0; i < 100000; i++) {
+  validTickets.add(`TICKET_${i}_2026WC`);
+}
+
+// Simulate latency increases under load
+function getBaseLatency() {
+  const loadFactor = requestCount / 1000; // Increases with request count
+  const bottleneck = Math.min(loadFactor * 500, 5000); // Max 5 sec delay
+  return 50 + bottleneck;
+}
+
+// Health endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    uptime: process.uptime(),
+    metrics: {
+      avgLatency,
+      cpuUsage,
+      memoryUsage,
+      activeServers,
+      requestsPerSecond: requestCount / 60
+    }
+  });
+});
+
+// Main ticket validation endpoint
+app.post('/api/ticket/validate', async (req, res) => {
+  const startTime = Date.now();
+  requestCount++;
+
+  const { ticketId, userId } = req.body;
+
+  // Simulate latency
+  const latency = getBaseLatency();
+  await new Promise(resolve => setTimeout(resolve, latency));
+
+  // Simulate crashes at high load
+  if (requestCount > 5000 && Math.random() < 0.1) {
+    cpuUsage = 95;
+    return res.status(503).json({
+      error: 'Service overloaded',
+      metrics: { cpuUsage, memoryUsage }
+    });
+  }
+
+  // Process ticket
+  const isValid = validTickets.has(ticketId);
+  avgLatency = (avgLatency * 0.9) + (Date.now() - startTime) * 0.1;
+  cpuUsage = Math.min(95, 20 + (requestCount / 100));
+  memoryUsage = Math.min(90, 30 + (requestCount / 150));
+
+  res.status(isValid ? 200 : 401).json({
+    valid: isValid,
+    processingTime: Date.now() - startTime,
+    metrics: { avgLatency, cpuUsage, memoryUsage, activeServers }
+  });
+});
+
+// Admin endpoint to simulate scaling
+app.post('/api/admin/scale', (req, res) => {
+  const { action } = req.body;
+  
+  if (action === 'add-server') {
+    activeServers++;
+    cpuUsage = Math.max(20, cpuUsage - 15);
+    memoryUsage = Math.max(30, memoryUsage - 10);
+  } else if (action === 'remove-server' && activeServers > 1) {
+    activeServers--;
+    cpuUsage = Math.min(95, cpuUsage + 10);
+  }
+
+  res.json({
+    success: true,
+    activeServers,
+    metrics: { cpuUsage, memoryUsage, avgLatency }
+  });
+});
+
+// Reset endpoint (for testing)
+app.post('/api/admin/reset', (req, res) => {
+  requestCount = 0;
+  avgLatency = 50;
+  cpuUsage = 20;
+  memoryUsage = 30;
+  activeServers = 1;
+  res.json({ status: 'reset' });
+});
+
+const PORT = process.env.API_PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Fake FIFA Ticketing API running on port ${PORT}`);
+  console.log(`⚽ Ready to simulate 80,000 fans entering the stadium`);
+});
+2.3 Containerize the API
+File: api-server/Dockerfile
+dockerfileFROM node:18-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install --production
+
+COPY src ./src
+
+EXPOSE 3000
+
+CMD ["node", "src/app.js"]
+File: api-server/package.json
+json{
+  "name": "fifa-ticketing-api",
+  "version": "1.0.0",
+  "description": "Fake FIFA World Cup ticketing API for simulation",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "nodemon src/app.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
+2.4 Testing the API Locally
+bashcd api-server
+npm install
+npm start
+
+# In another terminal, test with:
+curl -X POST http://localhost:3000/api/ticket/validate \
+  -H "Content-Type: application/json" \
+  -d '{"ticketId":"TICKET_1_2026WC","userId":"user123"}'
+
+# Check health
+curl http://localhost:3000/health
+
+Phase 3: Load Testing with K6 (Week 2)
+3.1 K6 Installation & Setup
+bash# Install K6
+curl https://dl.k6.io/install/linux.sh | sudo bash
+
+# Verify
+k6 version
+
+# Install Grafana cloud (optional, for visualization)
+npm install -g @grafana/cloud-cli
+3.2 Load Test Script
+File: load-testing/crowd-surge.js
+javascriptimport http from 'k6/http';
+import { check, sleep } from 'k6';
+import { Counter, Trend, Gauge } from 'k6/metrics';
+
+// Define custom metrics
+const errorCount = new Counter('errors');
+const responseTime = new Trend('response_time');
+const activeVUS = new Gauge('active_vus');
+
+export const options = {
+  stages: [
+    // Warm up
+    { duration: '10s', target: 100 },
+    
+    // Gradual increase (like fans arriving)
+    { duration: '30s', target: 500 },
+    { duration: '30s', target: 1000 },
+    { duration: '30s', target: 2000 },
+    { duration: '30s', target: 3000 },
+    
+    // Peak load (like all fans at once)
+    { duration: '60s', target: 5000 },
+    
+    // Sustained peak
+    { duration: '30s', target: 5000 },
+    
+    // Cool down
+    { duration: '20s', target: 0 }
+  ],
+  thresholds: {
+    'response_time': ['p(95)<2000', 'p(99)<5000'],
+    'errors': ['count<100']
+  },
+  ext: {
+    loadimpact: {
+      projectID: 3473834,
+      name: 'FIFA Stadium Ticketing Load Test'
+    }
+  }
+};
+
+const API_URL = __ENV.API_URL || 'http://localhost:3000';
+
+export default function () {
+  activeVUS.add(__VU); // Track concurrent users
+
+  const ticketId = `TICKET_${__VU % 100000}_2026WC`;
+  const payload = JSON.stringify({
+    ticketId: ticketId,
+    userId: `user_${__VU}`
+  });
+
+  const params = {
+    headers: { 'Content-Type': 'application/json' },
+    timeout: '30s'
+  };
+
+  // Main load test
+  const response = http.post(
+    `${API_URL}/api/ticket/validate`,
+    payload,
+    params
+  );
+
+  // Record metrics
+  responseTime.add(response.timings.duration);
+
+  // Check for success
+  const success = check(response, {
+    'status is 200 or 503': (r) => r.status === 200 || r.status === 503,
+    'response time < 2s': (r) => r.timings.duration < 2000,
+    'has metrics': (r) => r.json('metrics') !== null
+  });
+
+  if (!success) {
+    errorCount.add(1);
+  }
+
+  sleep(0.1); // Small delay between requests
+}
+
+export function handleSummary(data) {
+  return {
+    'summary.json': JSON.stringify(data),
+    stdout: textSummary(data, { indent: ' ', enableColors: true })
+  };
+}
+3.3 Running the Load Test
+bash# Run locally
+k6 run load-testing/crowd-surge.js
+
+# Run with higher VUs (requires more RAM)
+k6 run --vus 100 --duration 120s load-testing/crowd-surge.js
+
+# Export results to JSON
+k6 run --out json=results.json load-testing/crowd-surge.js
+
+Phase 4: Dynatrace Setup (Week 2)
+4.1 Free Trial Registration
+
+Go to https://www.dynatrace.com/trial
+Create account (free 15-day trial, no credit card)
+Create environment (defaults to SaaS)
+Note your Environment ID and Cluster URL
+
+4.2 API Token Generation
+
+In Dynatrace: Settings → API tokens
+Create new token with scopes:
+
+metrics.read
+entities.read
+events.read
+problems.read
+syntheticLocations.read
+
+
+Copy token value into .env
+
+4.3 API Instrumentation
+File: api-server/src/metrics.js
+javascriptconst https = require('https');
+
+class DynatraceMetrics {
+  constructor(envId, apiToken, clusterUrl) {
+    this.envId = envId;
+    this.apiToken = apiToken;
+    this.clusterUrl = clusterUrl;
+  }
+
+  async sendMetric(metricName, value, dimensions = {}) {
+    const timestamp = Date.now();
+    const payload = {
+      timeseries: [{
+        key: metricName,
+        datapoints: [[timestamp, value]],
+        dimensions: dimensions
+      }]
+    };
+
+    const options = {
+      hostname: this.clusterUrl.replace('https://', ''),
+      path: `/api/v2/metrics/ingest`,
+      method: 'POST',
+      headers: {
+        'Authorization': `Api-Token ${this.apiToken}`,
+        'Content-Type': 'application/json'
+      }
+    };
+
+    return new Promise((resolve, reject) => {
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => resolve({ status: res.statusCode, data }));
+      });
+      req.on('error', reject);
+      req.write(JSON.stringify(payload));
+      req.end();
+    });
+  }
+
+  async sendEvent(eventName, description, severity = 'CUSTOM_ALERT') {
+    const payload = {
+      eventType: 'CUSTOM_INFO',
+      title: eventName,
+      description: description,
+      severity: severity,
+      source: 'FIFA-Stadium-API'
+    };
+
+    // Implementation for event posting
+  }
+}
+
+module.exports = DynatraceMetrics;
+4.4 Create Custom Dashboard in Dynatrace
+
+Dashboards → Create Dashboard
+Add tiles:
+
+Response Time (p95, p99)
+Error Rate (%)
+CPU Usage (%)
+Memory Usage (%)
+Requests Per Second
+Active Servers Count
+
+
+
+
+Phase 5: Dynatrace MCP Server (Week 3)
+5.1 Install & Run MCP Server
+bash# Install globally
+npm install -g @dynatrace-oss/dynatrace-mcp-server
+
+# Verify
+npx @dynatrace-oss/dynatrace-mcp-server --version
+
+# Run with environment variables
+export DYNATRACE_ENV_ID=your-env-id
+export DYNATRACE_API_TOKEN=your-api-token
+export DYNATRACE_CLUSTER_URL=https://your-cluster.dynatrace.com
+
+npx -y @dynatrace-oss/dynatrace-mcp-server@latest
+5.2 MCP Configuration
+File: mcp-server/config.json
+json{
+  "mcp_server": {
+    "type": "stdio",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@dynatrace-oss/dynatrace-mcp-server@latest"
+    ],
+    "env": {
+      "DYNATRACE_ENV_ID": "${DYNATRACE_ENV_ID}",
+      "DYNATRACE_API_TOKEN": "${DYNATRACE_API_TOKEN}",
+      "DYNATRACE_CLUSTER_URL": "${DYNATRACE_CLUSTER_URL}"
+    }
+  },
+  "tools": [
+    "query_metrics",
+    "get_alerts",
+    "get_problems",
+    "get_entities",
+    "get_timeseries_data"
+  ]
+}
+5.3 MCP Tool Overview
+The Dynatrace MCP server exposes tools like:
+get_metrics() 
+  → Returns: CPU, memory, response time, error rate
+
+get_problems()
+  → Returns: Active issues, severity levels
+
+query_timeseries(metricName, from, to)
+  → Returns: Historical metric data for analysis
+
+get_entities()
+  → Returns: Services, hosts, applications being monitored
+
+get_alerts()
+  → Returns: Recent alerts and anomalies
+
+Phase 6: AI Agent Development (Week 3-4)
+6.1 Claude AI Agent Architecture
+File: ai-agent/agent.js
+javascriptconst Anthropic = require('@anthropic-ai/sdk');
+const DynatraceClient = require('./dynatrace-client');
+const AutoFixActions = require('./actions');
+
+class StadiumTrafficAgent {
+  constructor(apiKey, dynatraceConfig) {
+    this.client = new Anthropic({
+      apiKey: apiKey
+    });
+    this.dynatrace = new DynatraceClient(dynatraceConfig);
+    this.actions = new AutoFixActions();
+    this.monitoringActive = false;
+    this.checkInterval = 5000; // ms
+  }
+
+  // Gather current metrics from Dynatrace
+  async gatherMetrics() {
+    console.log('📊 Gathering metrics from Dynatrace...');
+    
+    const metrics = await this.dynatrace.getMetrics([
+      'builtin:service.response.time',
+      'builtin:service.errors.total',
+      'builtin:system.cpu.usage',
+      'builtin:system.mem.usage',
+      'builtin:service.requestCount.total'
+    ]);
+
+    const problems = await this.dynatrace.getProblems();
+    const alerts = await this.dynatrace.getAlerts();
+
+    return {
+      timestamp: new Date().toISOString(),
+      metrics,
+      problems,
+      alerts,
+      criticalThresholds: {
+        responseTime: metrics.responseTime > 2000,
+        errorRate: metrics.errorRate > 5,
+        cpuUsage: metrics.cpuUsage > 80,
+        memoryUsage: metrics.memoryUsage > 85
+      }
+    };
+  }
+
+  // Analyze metrics with Claude
+  async analyzeWithAI(metricsData) {
+    console.log('🤖 Sending metrics to Claude for analysis...');
+
+    const systemPrompt = `You are an expert DevOps engineer monitoring a FIFA World Cup stadium's ticketing system. 
+You analyze performance metrics and recommend immediate actions.
+
+When analyzing metrics:
+1. Identify the ROOT CAUSE of any bottleneck
+2. Assess SEVERITY (Critical/High/Medium/Low)
+3. Recommend SPECIFIC ACTION (scale servers, optimize database, etc.)
+4. Provide EXPECTED OUTCOME
+
+Always respond in JSON format with fields:
+{
+  "analysis": "description of what's happening",
+  "severity": "Critical|High|Medium|Low",
+  "rootCause": "specific component failing",
+  "recommendedAction": "action to take",
+  "actionCode": "add-server|remove-server|clear-cache|optimize-queries|restart-service",
+  "expectedOutcome": "what should improve",
+  "confidence": 0.0-1.0
+}`;
+
+    const metricsPrompt = `Current Stadium System Metrics (Real-time from Dynatrace):
+
+RESPONSE TIME METRICS:
+- P50 Latency: ${metricsData.metrics.latencyP50}ms
+- P95 Latency: ${metricsData.metrics.latencyP95}ms
+- P99 Latency: ${metricsData.metrics.latencyP99}ms
+
+ERROR METRICS:
+- Error Rate: ${metricsData.metrics.errorRate}%
+- Failed Requests: ${metricsData.metrics.failedRequests}
+- Errors in Last Hour: ${metricsData.metrics.errorsLastHour}
+
+RESOURCE METRICS:
+- CPU Usage: ${metricsData.metrics.cpuUsage}%
+- Memory Usage: ${metricsData.metrics.memoryUsage}%
+- Active Connections: ${metricsData.metrics.activeConnections}
+- Current Servers: ${metricsData.metrics.activeServers}
+
+TRAFFIC METRICS:
+- Requests Per Second: ${metricsData.metrics.rps}
+- Peak RPS (Last Hour): ${metricsData.metrics.peakRps}
+- Concurrent Users: ${metricsData.metrics.concurrentUsers}
+
+ACTIVE PROBLEMS (from Dynatrace):
+${metricsData.problems.map(p => `- ${p.title} (Severity: ${p.severity})`).join('\n')}
+
+RECENT ALERTS:
+${metricsData.alerts.map(a => `- ${a.message}`).join('\n')}
+
+Please analyze this data and provide recommendations.`;
+
+    const response = await this.client.messages.create({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 500,
+      messages: [
+        {
+          role: 'user',
+          content: metricsPrompt
+        }
+      ],
+      system: systemPrompt
+    });
+
+    // Parse AI response
+    const responseText = response.content[0].text;
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    const analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+
+    return analysis;
+  }
+
+  // Execute recommended action
+  async executeAction(analysis) {
+    if (!analysis.actionCode) {
+      console.log('✅ System healthy - no action needed');
+      return;
+    }
+
+    console.log(`⚡ Executing action: ${analysis.actionCode}`);
+    console.log(`   Reason: ${analysis.analysis}`);
+
+    const result = await this.actions.execute(analysis.actionCode);
+    
+    return {
+      action: analysis.actionCode,
+      success: result.success,
+      result: result.message,
+      expectedOutcome: analysis.expectedOutcome
+    };
+  }
+
+  // Main monitoring loop
+  async startMonitoring() {
+    console.log('🏟️  Stadium Traffic Monitoring Started');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    
+    this.monitoringActive = true;
+
+    while (this.monitoringActive) {
+      try {
+        // 1. Gather metrics
+        const metrics = await this.gatherMetrics();
+
+        // 2. Analyze with AI
+        const analysis = await this.analyzeWithAI(metrics);
+
+        // 3. Display results
+        console.log(`\n[${new Date().toISOString()}]`);
+        console.log(`Severity: ${analysis.severity || 'Unknown'}`);
+        console.log(`Analysis: ${analysis.analysis || 'No analysis'}`);
+
+        // 4. Execute if needed
+        if (analysis.actionCode) {
+          const actionResult = await this.executeAction(analysis);
+          console.log(`Action Result: ${actionResult.success ? '✅ Success' : '❌ Failed'}`);
+          console.log(`Expected Outcome: ${actionResult.expectedOutcome}`);
+        }
+
+      } catch (error) {
+        console.error('❌ Monitoring error:', error.message);
+      }
+
+      // Wait before next check
+      await new Promise(resolve => setTimeout(resolve, this.checkInterval));
+    }
+  }
+
+  // Stop monitoring
+  stopMonitoring() {
+    this.monitoringActive = false;
+    console.log('🛑 Monitoring Stopped');
+  }
+}
+
+module.exports = StadiumTrafficAgent;
+6.2 Dynatrace Client Wrapper
+File: ai-agent/dynatrace-client.js
+javascriptconst https = require('https');
+
+class DynatraceClient {
+  constructor(config) {
+    this.envId = config.envId;
+    this.apiToken = config.apiToken;
+    this.clusterUrl = config.clusterUrl;
+  }
+
+  async makeRequest(path, method = 'GET', body = null) {
+    return new Promise((resolve, reject) => {
+      const url = new URL(this.clusterUrl + path);
+      const options = {
+        hostname: url.hostname,
+        path: url.pathname + url.search,
+        method,
+        headers: {
+          'Authorization': `Api-Token ${this.apiToken}`,
+          'Content-Type': 'application/json'
+        }
+      };
+
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch {
+            resolve(data);
+          }
+        });
+      });
+
+      req.on('error', reject);
+      if (body) req.write(JSON.stringify(body));
+      req.end();
+    });
+  }
+
+  async getMetrics(metricNames) {
+    const path = `/api/v2/metrics/query?metricSelector=${metricNames.join(',')}`;
+    const response = await this.makeRequest(path);
+    
+    // Parse response into usable format
+    return {
+      latencyP50: response.result?.[0]?.data?.[0]?.values?.[0] || 0,
+      latencyP95: response.result?.[1]?.data?.[0]?.values?.[0] || 0,
+      latencyP99: response.result?.[2]?.data?.[0]?.values?.[0] || 0,
+      errorRate: response.result?.[3]?.data?.[0]?.values?.[0] || 0,
+      cpuUsage: response.result?.[4]?.data?.[0]?.values?.[0] || 0,
+      memoryUsage: response.result?.[5]?.data?.[0]?.values?.[0] || 0
+    };
+  }
+
+  async getProblems() {
+    const path = `/api/v2/problems?filter=status("open")&sort=severity`;
+    const response = await this.makeRequest(path);
+    return response.problems || [];
+  }
+
+  async getAlerts() {
+    const path = `/api/v2/events?filter=type("CUSTOM_ALERT")&sort=-created`;
+    const response = await this.makeRequest(path);
+    return response.events || [];
+  }
+
+  async getEntities(entityType = 'SERVICE') {
+    const path = `/api/v2/entities?type=${entityType}`;
+    const response = await this.makeRequest(path);
+    return response.entities || [];
+  }
+}
+
+module.exports = DynatraceClient;
+6.3 Auto-Fix Actions
+File: ai-agent/actions.js
+javascriptconst http = require('http');
+
+class AutoFixActions {
+  async execute(actionCode) {
+    console.log(`Executing action: ${actionCode}`);
+
+    switch (actionCode) {
+      case 'add-server':
+        return this.addServer();
+      case 'remove-server':
+        return this.removeServer();
+      case 'clear-cache':
+        return this.clearCache();
+      case 'optimize-queries':
+        return this.optimizeQueries();
+      case 'restart-service':
+        return this.restartService();
+      default:
+        return { success: false, message: 'Unknown action' };
+    }
+  }
+
+  async addServer() {
+    return new Promise((resolve) => {
+      const data = JSON.stringify({ action: 'add-server' });
+      const options = {
+        hostname: 'localhost',
+        port: 3000,
+        path: '/api/admin/scale',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': data.length
+        }
+      };
+
+      const req = http.request(options, (res) => {
+        res.on('end', () => {
+          resolve({
+            success: true,
+            message: '✅ Added new server instance'
+          });
+        });
+      });
+
+      req.write(data);
+      req.end();
+    });
+  }
+
+  async removeServer() {
+    // Similar to addServer but with remove action
+    return { success: true, message: '✅ Removed server instance' };
+  }
+
+  async clearCache() {
+    return { success: true, message: '✅ Cleared application cache' };
+  }
+
+  async optimizeQueries() {
+    return { success: true, message: '✅ Optimized database queries' };
+  }
+
+  async restartService() {
+    return { success: true, message: '✅ Restarted ticketing service' };
+  }
+}
+
+module.exports = AutoFixActions;
+
+Phase 7: Integration & Testing (Week 4)
+7.1 Docker Compose Orchestration
+File: docker-compose.yml
+yamlversion: '3.8'
+
+services:
+  # Fake FIFA Ticketing API
+  api-server:
+    build:
+      context: ./api-server
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      API_PORT: 3000
+      API_ENV: production
+      DYNATRACE_ENV_ID: ${DYNATRACE_ENV_ID}
+      DYNATRACE_API_TOKEN: ${DYNATRACE_API_TOKEN}
+    networks:
+      - fifa-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MCP Server Bridge (optional local instance)
+  mcp-server:
+    image: node:18-alpine
+    working_dir: /app
+    command: sh -c "npm install -g @dynatrace-oss/dynatrace-mcp-server && npx @dynatrace-oss/dynatrace-mcp-server"
+    environment:
+      DYNATRACE_ENV_ID: ${DYNATRACE_ENV_ID}
+      DYNATRACE_API_TOKEN: ${DYNATRACE_API_TOKEN}
+      DYNATRACE_CLUSTER_URL: ${DYNATRACE_CLUSTER_URL}
+    ports:
+      - "8000:8000"
+    networks:
+      - fifa-network
+    depends_on:
+      - api-server
+
+networks:
+  fifa-network:
+    driver: bridge
+7.2 End-to-End Test Scenario
+File: e2e-test.js
+javascriptconst StadiumTrafficAgent = require('./ai-agent/agent');
+const { exec } = require('child_process');
+
+async function runFullDemo() {
+  console.log('🚀 FIFA Stadium AI Traffic Management Demo');
+  console.log('═══════════════════════════════════════════\n');
+
+  // 1. Reset API
+  console.log('Step 1: Resetting stadium API...');
+  exec('curl -X POST http://localhost:3000/api/admin/reset');
+  await sleep(2000);
+
+  // 2. Start AI Agent
+  const agent = new StadiumTrafficAgent(
+    process.env.CLAUDE_API_KEY,
+    {
+      envId: process.env.DYNATRACE_ENV_ID,
+      apiToken: process.env.DYNATRACE_API_TOKEN,
+      clusterUrl: process.env.DYNATRACE_CLUSTER_URL
+    }
+  );
+
+  console.log('Step 2: Starting AI monitoring agent...\n');
+  
+  // Start monitoring in background
+  agent.startMonitoring();
+
+  // 3. Start load test
+  console.log('Step 3: Starting K6 load test (simulating 80,000 fans)...\n');
+  exec('k6 run load-testing/crowd-surge.js --vus 50');
+
+  // 4. Watch the magic happen
+  console.log('Step 4: Watching Claude analyze and fix issues in real-time...\n');
+  await sleep(120000); // Run for 2 minutes
+
+  // 5. Stop monitoring
+  agent.stopMonitoring();
+
+  console.log('\n✅ Demo Complete!');
+  console.log('Check your Dynatrace dashboard for the full metrics story.');
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+runFullDemo().catch(console.error);
+
+Phase 8: Demonstration & Demo Script (Week 4-5)
+8.1 Live Demo Flow
+File: docs/demo-script.md
+⏱️  Total Demo Time: 15 minutes
+
+DEMO SETUP (5 min)
+├─ Terminal 1: Start API server
+├─ Terminal 2: Show Dynatrace dashboard
+├─ Terminal 3: Ready to start AI agent
+└─ Terminal 4: Ready to start K6 load test
+
+LIVE DEMO (10 min)
+├─ [2 min] Start AI Agent - show it monitoring baseline metrics
+├─ [1 min] Show Dynatrace dashboard with healthy metrics
+├─ [2 min] Launch K6 load test - watch metrics degrade
+│   └─ Response time climbs from 50ms → 5000ms
+│   └─ Error rate jumps from 0% → 15%
+│   └─ CPU spikes from 20% → 95%
+├─ [2 min] Claude detects problems, analyzes root cause
+│   └─ Claude: "CPU usage at 95% - need to add servers"
+│   └─ Action: Add 2 new server instances
+├─ [1 min] Watch metrics recover in real-time
+│   └─ Response time drops back to 200ms
+│   └─ Error rate drops to 1%
+│   └─ CPU normalized to 45%
+├─ [1 min] Stop load test, show final metrics
+└─ [1 min] Review Claude's decisions and actions
+
+TALKING POINTS
+- "This is what happens when 80,000 fans arrive at once"
+- "Traditional monitoring only shows problems - Claude FIXES them"
+- "No human IT staff needed at 3 AM for emergencies"
+- "Cost savings: auto-scaling only when needed"
+8.2 Key Metrics to Show
+Display these on your Dynatrace dashboard during demo:
+┌─────────────────────────────────────────────┐
+│   FIFA STADIUM TICKETING - SYSTEM HEALTH    │
+├─────────────────────────────────────────────┤
+│                                             │
+│  Response Time     ████████░░░  847ms       │
+│  Error Rate        ███░░░░░░░░   3.2%       │
+│  CPU Usage         ██████░░░░░   65%        │
+│  Memory Usage      ████░░░░░░░   38%        │
+│                                             │
+│  Active Servers    [███ 3 nodes]            │
+│  RPS               ████████░░░  4,200/s     │
+│  Status            🟢 HEALTHY                │
+│                                             │
+└─────────────────────────────────────────────┘
