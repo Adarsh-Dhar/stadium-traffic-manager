@@ -20,7 +20,16 @@ import {
   getSimulationStatus,
   getMcpStatus,
 } from "../lib/stadium-state.js";
-import apiFootball from "../lib/api-football.js";
+import {
+  getAllMatches,
+  getUpcomingMatches,
+  getLiveMatches,
+  getFinishedMatches,
+  getMatchById,
+  getStandings,
+  getGroupStandings,
+  tournament,
+} from "../lib/wc2026-data.js";
 
 const router: IRouter = Router();
 
@@ -165,9 +174,16 @@ router.get("/metrics/mcp-status", async (_req, res): Promise<void> => {
 router.get("/worldcup/matches", async (req, res): Promise<void> => {
   try {
     const status = req.query.status as string | undefined;
-    const data = await apiFootball.getWorldCupMatches(
-      status as 'live' | 'upcoming' | 'finished' | undefined
-    );
+    let data;
+    if (status === 'live') {
+      data = await getLiveMatches();
+    } else if (status === 'upcoming') {
+      data = await getUpcomingMatches();
+    } else if (status === 'finished') {
+      data = await getFinishedMatches();
+    } else {
+      data = await getAllMatches();
+    }
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch World Cup matches" });
@@ -177,7 +193,7 @@ router.get("/worldcup/matches", async (req, res): Promise<void> => {
 // GET /worldcup/upcoming - Get upcoming World Cup matches
 router.get("/worldcup/upcoming", async (_req, res): Promise<void> => {
   try {
-    const data = await apiFootball.getUpcomingMatches(10);
+    const data = await getUpcomingMatches(10);
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch upcoming matches" });
@@ -187,7 +203,7 @@ router.get("/worldcup/upcoming", async (_req, res): Promise<void> => {
 // GET /worldcup/live - Get live World Cup matches
 router.get("/worldcup/live", async (_req, res): Promise<void> => {
   try {
-    const data = await apiFootball.getLiveMatches();
+    const data = await getLiveMatches();
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch live matches" });
@@ -197,7 +213,7 @@ router.get("/worldcup/live", async (_req, res): Promise<void> => {
 // GET /worldcup/standings - Get World Cup standings/table
 router.get("/worldcup/standings", async (_req, res): Promise<void> => {
   try {
-    const data = await apiFootball.getWorldCupStandings();
+    const data = await getStandings();
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch standings" });
@@ -207,8 +223,7 @@ router.get("/worldcup/standings", async (_req, res): Promise<void> => {
 // GET /worldcup/tournament - Get tournament information
 router.get("/worldcup/tournament", async (_req, res): Promise<void> => {
   try {
-    const data = await apiFootball.getTournamentInfo();
-    res.json(data);
+    res.json(tournament);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch tournament info" });
   }
@@ -222,8 +237,13 @@ router.get("/worldcup/team/:id", async (req, res): Promise<void> => {
       res.status(400).json({ error: "Invalid team ID" });
       return;
     }
-    const data = await apiFootball.getTeamInfo(teamId);
-    res.json(data);
+    // Derive team info from matches/standings
+    const all = await getAllMatches();
+    const teamMatches = all.matches.filter(
+      (m: any) => m.homeTeam.id === teamId || m.awayTeam.id === teamId
+    );
+    const team = teamMatches[0]?.homeTeam.id === teamId ? teamMatches[0].homeTeam : teamMatches[0]?.awayTeam;
+    res.json(team || null);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch team info" });
   }
@@ -237,7 +257,7 @@ router.get("/worldcup/match/:id/stats", async (req, res): Promise<void> => {
       res.status(400).json({ error: "Invalid fixture ID" });
       return;
     }
-    const data = await apiFootball.getMatchStats(fixtureId);
+    const data = await getMatchById(fixtureId);
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch match stats" });
@@ -248,7 +268,7 @@ router.get("/worldcup/match/:id/stats", async (req, res): Promise<void> => {
 router.get("/worldcup/group/:name", async (req, res): Promise<void> => {
   try {
     const groupName = req.params.name;
-    const data = await apiFootball.getGroupStandingsWithMatches(groupName);
+    const data = await getGroupStandings(groupName);
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch group standings" });
@@ -258,10 +278,8 @@ router.get("/worldcup/group/:name", async (req, res): Promise<void> => {
 // GET /worldcup/bracket - Get knockout stage matches
 router.get("/worldcup/bracket", async (_req, res): Promise<void> => {
   try {
-    const allMatches = await apiFootball.getWorldCupMatches();
-    const knockoutMatches = allMatches.matches.filter(
-      (m: any) => m.stage !== 'GROUP_STAGE'
-    );
+    const allMatches = await getAllMatches();
+    const knockoutMatches = allMatches.matches.filter((m: any) => m.stage !== 'GROUP_STAGE');
     res.json({ matches: knockoutMatches });
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch bracket" });

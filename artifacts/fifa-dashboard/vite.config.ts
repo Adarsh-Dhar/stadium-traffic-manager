@@ -62,6 +62,14 @@ export default defineConfig({
     port,
     strictPort: true,
     host: "0.0.0.0",
+    // Proxy API requests to the local API server during development
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
     allowedHosts: true,
     fs: {
       strict: true,

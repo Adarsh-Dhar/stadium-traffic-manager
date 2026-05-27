@@ -10,8 +10,6 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 const API_BASE = "http://localhost:5000";
-
-// football-data.org match structure
 interface Match {
   id: number;
   utcDate: string;
@@ -25,7 +23,6 @@ interface Match {
   };
 }
 
-// football-data.org standing structure
 interface TeamStanding {
   position: number;
   team: { id: number; name: string; crest: string };
@@ -34,7 +31,6 @@ interface TeamStanding {
   goalsAgainst: number;
 }
 
-// football-data.org competition info
 interface TournamentInfo {
   id: number;
   name: string;
@@ -76,7 +72,6 @@ export default function Dashboard() {
         const standingsRes = await fetch(`${API_BASE}/api/fifa/worldcup/standings`);
         if (standingsRes.ok) {
           const standingsData = await standingsRes.json();
-          // football-data.org: standings.standings[0].table is the main group
           let allStandings: TeamStanding[] = [];
           if (standingsData.standings && Array.isArray(standingsData.standings)) {
             // Use the first group (usually 'TOTAL' or 'GROUP A')
@@ -89,16 +84,17 @@ export default function Dashboard() {
                 goalsFor: entry.goalsFor,
                 goalsAgainst: entry.goalsAgainst,
               }));
-            }
-          }
-          setStandings(allStandings.slice(0, 8));
-        }
 
-        // Fetch tournament info
+                setStandings(allStandings);
+              }
+            }
+
+          }
+
+          // Fetch tournament info
         const tournamentRes = await fetch(`${API_BASE}/api/fifa/worldcup/tournament`);
         if (tournamentRes.ok) {
           const tournamentData = await tournamentRes.json();
-          // football-data.org: direct competition object
           if (tournamentData && tournamentData.id) {
             setTournamentInfo(tournamentData);
           }
