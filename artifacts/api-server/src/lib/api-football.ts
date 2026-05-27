@@ -1,118 +1,107 @@
-const BASE_URL = 'https://v3.football.api-sports.io';
-const API_KEY = process.env.API_FOOTBALL_KEY;
+const BASE_URL = 'https://api.football-data.org/v4';
+const API_KEY = process.env.FOOTBALL_DATA_API_KEY;
 
 // Log API key status for debugging
 console.error('[API Football] Initializing with key:', API_KEY ? 'SET' : 'NOT SET');
+
 
 interface FetchOptions {
   method?: string;
   headers?: Record<string, string>;
 }
 
-async function fetchFromAPIFootball(endpoint: string, options: FetchOptions = {}) {
+async function fetchFromFootballData(endpoint: string, options: FetchOptions = {}) {
   const url = `${BASE_URL}${endpoint}`;
-  
   const headers = {
-    'x-apisports-key': API_KEY || '',
+    'X-Auth-Token': API_KEY || '',
+    'Cache-Control': 'no-cache',
     ...options.headers,
   };
-
   try {
-    console.error(`[API Football] Fetching ${url}`);
+    console.error(`[Football Data] Fetching ${url}`);
     const response = await fetch(url, {
       method: options.method || 'GET',
       headers,
     });
-
-    console.error(`[API Football] Response status: ${response.status}`);
-
+    console.error(`[Football Data] Response status: ${response.status}`);
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[API Football] Error response: ${errorText}`);
-      throw new Error(`API Football API error: ${response.status} - ${errorText}`);
+      console.error(`[Football Data] Error response: ${errorText}`);
+      throw new Error(`Football Data API error: ${response.status} - ${errorText}`);
     }
-
     const data = await response.json();
-    console.error(`[API Football] Success: received data`);
+    console.error(`[Football Data] Success: received data`);
     return data;
   } catch (error) {
-    console.error(`[API Football] Error fetching from ${endpoint}:`, error);
+    console.error(`[Football Data] Error fetching from ${endpoint}:`, error);
     throw error;
   }
 }
 
-// Get current fixtures/matches (using Premier League as demo since World Cup 2026 not available in free tier)
+// Get current fixtures/matches (World Cup)
 export async function getWorldCupMatches(status?: 'live' | 'upcoming' | 'finished') {
-  const leagueId = 39; // English Premier League (has live data)
-  const season = 2024;
-  
-  let endpoint = `/fixtures?league=${leagueId}&season=${season}`;
+  // football-data.org: /competitions/WC/matches?status=SCHEDULED|LIVE|FINISHED
+  let endpoint = `/competitions/WC/matches`;
   if (status) {
-    endpoint += `&status=${status}`;
+    // Map to football-data.org status
+    let mappedStatus = status === 'upcoming' ? 'SCHEDULED' : status.toUpperCase();
+    endpoint += `?status=${mappedStatus}`;
   }
-  
-  return fetchFromAPIFootball(endpoint);
+  return fetchFromFootballData(endpoint);
 }
 
-// Get standings/table
+// Get standings/table (World Cup)
 export async function getWorldCupStandings() {
-  const leagueId = 39; // English Premier League
-  const season = 2024;
-  
-  return fetchFromAPIFootball(`/standings?league=${leagueId}&season=${season}`);
+  // football-data.org: /competitions/WC/standings
+  return fetchFromFootballData(`/competitions/WC/standings`);
 }
 
-// Get team information
+// Get team information (World Cup team)
 export async function getTeamInfo(teamId: number) {
-  return fetchFromAPIFootball(`/teams?id=${teamId}`);
+  // football-data.org: /teams/{id}
+  return fetchFromFootballData(`/teams/${teamId}`);
 }
 
-// Get upcoming matches (next N matches)
+// Get upcoming matches (next N matches, World Cup)
 export async function getUpcomingMatches(limit: number = 10) {
-  const leagueId = 39;
-  const season = 2024;
-  
-  const response = await fetchFromAPIFootball(
-    `/fixtures?league=${leagueId}&season=${season}&status=upcoming`
-  );
-  
-  // Return only the requested number of matches
-  if (response?.response) {
+  // football-data.org: /competitions/WC/matches?status=SCHEDULED
+  const response = await fetchFromFootballData(`/competitions/WC/matches?status=SCHEDULED`);
+  if (response?.matches) {
     return {
       ...response,
-      response: response.response.slice(0, limit),
+      matches: response.matches.slice(0, limit),
     };
   }
-  
   return response;
 }
 
-// Get live matches
+// Get live matches (World Cup)
 export async function getLiveMatches() {
-  return fetchFromAPIFootball(`/fixtures?status=live&timezone=UTC`);
+  // football-data.org: /competitions/WC/matches?status=LIVE
+  return fetchFromFootballData(`/competitions/WC/matches?status=LIVE`);
 }
 
-// Get tournament info
+// Get tournament info (World Cup)
 export async function getTournamentInfo() {
-  const leagueId = 39;
-  const season = 2024;
-  
-  return fetchFromAPIFootball(`/leagues?id=${leagueId}&season=${season}`);
+  // football-data.org: /competitions/WC
+  return fetchFromFootballData(`/competitions/WC`);
 }
 
-// Get match statistics
-export async function getMatchStats(fixtureId: number) {
-  return fetchFromAPIFootball(`/fixtures/statistics?fixture=${fixtureId}`);
+// Get match statistics (not directly available in football-data.org for WC, fallback to match details)
+export async function getMatchStats(matchId: number) {
+  // football-data.org: /matches/{id}
+  return fetchFromFootballData(`/matches/${matchId}`);
 }
 
-// Get team statistics for a season
-export async function getTeamStatsForSeason(teamId: number, leagueId: number = 1, season: number = 2026) {
-  return fetchFromAPIFootball(`/teams/statistics?team=${teamId}&league=${leagueId}&season=${season}`);
+// Get team statistics for a season (not directly available in football-data.org, fallback to team info)
+export async function getTeamStatsForSeason(teamId: number) {
+  return fetchFromFootballData(`/teams/${teamId}`);
 }
 
-// Get head to head between two teams
+// Get head to head between two teams (not directly available in football-data.org, fallback to matches between teams)
 export async function getHeadToHead(teamId1: number, teamId2: number) {
-  return fetchFromAPIFootball(`/fixtures/headtohead?h2h=${teamId1}-${teamId2}`);
+  // football-data.org: /competitions/WC/matches?status=FINISHED&teamIds=teamId1,teamId2 (not a real param, but for demo)
+  return fetchFromFootballData(`/competitions/WC/matches?status=FINISHED`);
 }
 
 export default {

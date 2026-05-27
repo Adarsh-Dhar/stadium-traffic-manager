@@ -11,37 +11,36 @@ import { cn } from "@/lib/utils";
 
 const API_BASE = "http://localhost:5000";
 
+// football-data.org match structure
 interface Match {
-  fixture: {
-    id: number;
-    date: string;
-    status: string;
-  };
-  teams: {
-    home: { id: number; name: string; logo: string };
-    away: { id: number; name: string; logo: string };
-  };
-  goals: {
-    home: number | null;
-    away: number | null;
+  id: number;
+  utcDate: string;
+  status: string;
+  homeTeam: { id: number; name: string };
+  awayTeam: { id: number; name: string };
+  score: {
+    fullTime: { home: number | null; away: number | null };
+    halfTime: { home: number | null; away: number | null };
+    winner: string | null;
   };
 }
 
+// football-data.org standing structure
 interface TeamStanding {
-  rank: number;
-  team: { id: number; name: string; logo: string };
+  position: number;
+  team: { id: number; name: string; crest: string };
   points: number;
-  goalsDiff: number;
-  goals: { for: number; against: number };
+  goalsFor: number;
+  goalsAgainst: number;
 }
 
+// football-data.org competition info
 interface TournamentInfo {
-  league: {
-    id: number;
-    name: string;
-    logo: string;
-    season: number;
-  };
+  id: number;
+  name: string;
+  emblem: string;
+  area: { name: string };
+  currentSeason?: { startDate: string; endDate: string; currentMatchday?: number };
 }
 
 export default function Dashboard() {
@@ -63,27 +62,34 @@ export default function Dashboard() {
         const upcomingRes = await fetch(`${API_BASE}/api/fifa/worldcup/upcoming`);
         if (upcomingRes.ok) {
           const upcomingData = await upcomingRes.json();
-          setUpcomingMatches(upcomingData.response || []);
+          setUpcomingMatches(upcomingData.matches || []);
         }
 
         // Fetch live matches
         const liveRes = await fetch(`${API_BASE}/api/fifa/worldcup/live`);
         if (liveRes.ok) {
           const liveData = await liveRes.json();
-          setLiveMatches(liveData.response || []);
+          setLiveMatches(liveData.matches || []);
         }
 
         // Fetch standings
         const standingsRes = await fetch(`${API_BASE}/api/fifa/worldcup/standings`);
         if (standingsRes.ok) {
           const standingsData = await standingsRes.json();
-          const allStandings: TeamStanding[] = [];
-          if (standingsData.response && Array.isArray(standingsData.response)) {
-            standingsData.response.forEach((group: any) => {
-              if (group.standings && Array.isArray(group.standings[0])) {
-                allStandings.push(...group.standings[0]);
-              }
-            });
+          // football-data.org: standings.standings[0].table is the main group
+          let allStandings: TeamStanding[] = [];
+          if (standingsData.standings && Array.isArray(standingsData.standings)) {
+            // Use the first group (usually 'TOTAL' or 'GROUP A')
+            const group = standingsData.standings[0];
+            if (group && Array.isArray(group.table)) {
+              allStandings = group.table.map((entry: any) => ({
+                position: entry.position,
+                team: { id: entry.team.id, name: entry.team.name, crest: entry.team.crest },
+                points: entry.points,
+                goalsFor: entry.goalsFor,
+                goalsAgainst: entry.goalsAgainst,
+              }));
+            }
           }
           setStandings(allStandings.slice(0, 8));
         }
@@ -92,8 +98,9 @@ export default function Dashboard() {
         const tournamentRes = await fetch(`${API_BASE}/api/fifa/worldcup/tournament`);
         if (tournamentRes.ok) {
           const tournamentData = await tournamentRes.json();
-          if (tournamentData.response && tournamentData.response[0]) {
-            setTournamentInfo(tournamentData.response[0]);
+          // football-data.org: direct competition object
+          if (tournamentData && tournamentData.id) {
+            setTournamentInfo(tournamentData);
           }
         }
       } catch (err) {
@@ -153,12 +160,12 @@ export default function Dashboard() {
             <CardContent>
               <div className="space-y-4">
                 {liveMatches.map((match) => (
-                  <div key={match.fixture.id} className="flex items-center justify-between p-4 rounded-lg bg-card border border-border/50">
-                    <div className="text-sm font-semibold text-primary">{match.teams.home.name}</div>
+                  <div key={match.id} className="flex items-center justify-between p-4 rounded-lg bg-card border border-border/50">
+                    <div className="text-sm font-semibold text-primary">{match.homeTeam.name}</div>
                     <div className="text-2xl font-black text-foreground">
-                      {match.goals.home ?? '-'} - {match.goals.away ?? '-'}
+                      {(match.score.fullTime.home ?? '-')} - {(match.score.fullTime.away ?? '-')}
                     </div>
-                    <div className="text-sm font-semibold text-primary">{match.teams.away.name}</div>
+                    <div className="text-sm font-semibold text-primary">{match.awayTeam.name}</div>
                   </div>
                 ))}
               </div>
@@ -189,9 +196,9 @@ export default function Dashboard() {
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {upcomingMatches.slice(0, 6).map((match) => (
-                  <div key={match.fixture.id} className="p-4 rounded-lg bg-secondary/20 border border-secondary/50 hover:border-primary/50 transition-colors">
+                  <div key={match.id} className="p-4 rounded-lg bg-secondary/20 border border-secondary/50 hover:border-primary/50 transition-colors">
                     <div className="text-xs text-muted-foreground mb-2">
-                      {new Date(match.fixture.date).toLocaleDateString("en-US", {
+                      {new Date(match.utcDate).toLocaleDateString("en-US", {
                         month: "short",
                         day: "numeric",
                         hour: "2-digit",
@@ -199,9 +206,9 @@ export default function Dashboard() {
                       })}
                     </div>
                     <div className="flex items-center justify-between">
-                      <div className="text-sm font-semibold">{match.teams.home.name}</div>
+                      <div className="text-sm font-semibold">{match.homeTeam.name}</div>
                       <div className="text-xs text-muted-foreground">vs</div>
-                      <div className="text-sm font-semibold">{match.teams.away.name}</div>
+                      <div className="text-sm font-semibold">{match.awayTeam.name}</div>
                     </div>
                   </div>
                 ))}
@@ -227,16 +234,16 @@ export default function Dashboard() {
                   {standings.map((team, idx) => (
                     <div key={team.team.id} className="flex items-center justify-between p-3 rounded-lg bg-card/50 hover:bg-card/80 transition-colors border border-border/30">
                       <div className="flex items-center gap-3">
-                        <span className="text-sm font-bold text-primary w-6">{team.rank}</span>
+                        <span className="text-sm font-bold text-primary w-6">{team.position}</span>
                         <div className="flex items-center gap-2">
-                          {team.team.logo && (
-                            <img src={team.team.logo} alt={team.team.name} className="h-6 w-6 rounded-full" />
+                          {team.team.crest && (
+                            <img src={team.team.crest} alt={team.team.name} className="h-6 w-6 rounded-full" />
                           )}
                           <span className="text-sm font-semibold">{team.team.name}</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-4 text-xs">
-                        <span className="text-muted-foreground">G: {team.goals.for}-{team.goals.against}</span>
+                        <span className="text-muted-foreground">G: {team.goalsFor}-{team.goalsAgainst}</span>
                         <span className="font-bold text-primary">{team.points} pts</span>
                       </div>
                     </div>
@@ -264,7 +271,7 @@ export default function Dashboard() {
       {!loading && upcomingMatches.length === 0 && !error && (
         <Card className="border-border/50 bg-card/50">
           <CardContent className="pt-6 text-center text-muted-foreground">
-            <p>No match data available yet. Please ensure your API_FOOTBALL_KEY is configured correctly.</p>
+            <p>No match data available yet. Please ensure your Football Data API key is configured correctly and matches are scheduled.</p>
           </CardContent>
         </Card>
       )}
