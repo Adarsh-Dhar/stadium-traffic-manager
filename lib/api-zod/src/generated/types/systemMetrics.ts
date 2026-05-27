@@ -8,10 +8,16 @@
 
 export interface SystemMetrics {
   avgLatency: number;
+  p95Latency: number;
+  p99Latency: number;
   cpuUsage: number;
   memoryUsage: number;
   activeServers: number;
   requestsPerSecond: number;
   errorRate: number;
   totalRequests?: number;
+  /** Whether p95 latency is under K6 threshold (2000ms) */
+  k6P95Pass: boolean;
+  /** Whether p99 latency is under K6 threshold (5000ms) */
+  k6P99Pass: boolean;
 }

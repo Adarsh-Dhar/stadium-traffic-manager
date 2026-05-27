@@ -18,6 +18,7 @@ import {
   getAlerts,
   getStadiumCapacity,
   getSimulationStatus,
+  getMcpStatus,
 } from "../lib/stadium-state.js";
 
 const router: IRouter = Router();
@@ -150,6 +151,11 @@ router.post("/simulation/stop", async (_req, res): Promise<void> => {
 // GET /simulation/status
 router.get("/simulation/status", async (_req, res): Promise<void> => {
   res.json(getSimulationStatus());
+});
+
+// GET /metrics/mcp-status
+router.get("/metrics/mcp-status", async (_req, res): Promise<void> => {
+  res.json(getMcpStatus());
 });
 
 export default router;

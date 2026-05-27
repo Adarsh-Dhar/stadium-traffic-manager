@@ -23,6 +23,7 @@ import type {
   AiAnalysisResult,
   Alert,
   HealthStatus,
+  McpBridgeStatus,
   MetricsSnapshot,
   OverloadError,
   ResetResult,
@@ -995,6 +996,83 @@ export function useGetSimulationStatus<TData = Awaited<ReturnType<typeof getSimu
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetSimulationStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetMcpStatusUrl = () => {
+
+
+
+
+  return `/api/metrics/mcp-status`
+}
+
+/**
+ * @summary Get Dynatrace MCP bridge connection status
+ */
+export const getMcpStatus = async ( options?: RequestInit): Promise<McpBridgeStatus> => {
+
+  return customFetch<McpBridgeStatus>(getGetMcpStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMcpStatusQueryKey = () => {
+    return [
+    `/api/metrics/mcp-status`
+    ] as const;
+    }
+
+
+export const getGetMcpStatusQueryOptions = <TData = Awaited<ReturnType<typeof getMcpStatus>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMcpStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMcpStatusQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMcpStatus>>> = ({ signal }) => getMcpStatus({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMcpStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMcpStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getMcpStatus>>>
+export type GetMcpStatusQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get Dynatrace MCP bridge connection status
+ */
+
+export function useGetMcpStatus<TData = Awaited<ReturnType<typeof getMcpStatus>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMcpStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMcpStatusQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

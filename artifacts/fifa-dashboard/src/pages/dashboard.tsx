@@ -6,7 +6,7 @@ import * as z from "zod";
 import { 
   Server, Cpu, Activity, AlertTriangle, Zap, ServerCrash, 
   RotateCcw, Power, ShieldAlert, CheckCircle2, QrCode,
-  ActivitySquare
+  ActivitySquare, Link as LinkIcon, Clock, Wrench
 } from "lucide-react";
 import { 
   useGetCurrentMetrics, 
@@ -16,6 +16,7 @@ import {
   useResetSystem,
   useAiAnalyze,
   useValidateTicket,
+  useGetMcpStatus,
   getGetCurrentMetricsQueryKey,
   getGetAlertsQueryKey,
   getGetStadiumCapacityQueryKey
@@ -45,6 +46,7 @@ export default function Dashboard() {
   const { data: metrics } = useGetCurrentMetrics({ query: { refetchInterval: 2000 } });
   const { data: capacity } = useGetStadiumCapacity({ query: { refetchInterval: 3000 } });
   const { data: alerts } = useGetAlerts({ query: { refetchInterval: 3000 } });
+  const { data: mcpStatus } = useGetMcpStatus({ query: { refetchInterval: 10000 } });
 
   // Mutations
   const scaleServer = useScaleServer();
@@ -227,11 +229,35 @@ export default function Dashboard() {
             critical={metrics ? metrics.memoryUsage > 90 : false}
           />
           <MetricCard 
-            title="Latency" 
+            title="AVG Latency" 
             value={metrics?.avgLatency ? `${Math.round(metrics.avgLatency)}ms` : "--"} 
             icon={Zap}
             alert={metrics ? metrics.avgLatency > 500 : false}
             critical={metrics ? metrics.avgLatency > 1000 : false}
+          />
+          <MetricCard 
+            title="P95 Latency" 
+            value={metrics?.p95Latency ? `${Math.round(metrics.p95Latency)}ms` : "--"} 
+            icon={Zap}
+            alert={metrics ? metrics.p95Latency > 1500 && metrics.k6P95Pass : false}
+            critical={metrics ? !metrics.k6P95Pass : false}
+            badge={metrics ? (
+              metrics.k6P95Pass ? 
+                <Badge className="bg-success/20 text-success hover:bg-success/20 text-[9px] px-1 py-0 h-4 border-none">&lt; 2s</Badge> : 
+                <Badge className="bg-destructive/20 text-destructive hover:bg-destructive/20 text-[9px] px-1 py-0 h-4 border-none animate-pulse">BREACH</Badge>
+            ) : null}
+          />
+          <MetricCard 
+            title="P99 Latency" 
+            value={metrics?.p99Latency ? `${Math.round(metrics.p99Latency)}ms` : "--"} 
+            icon={Zap}
+            alert={metrics ? metrics.p99Latency > 4000 && metrics.k6P99Pass : false}
+            critical={metrics ? !metrics.k6P99Pass : false}
+            badge={metrics ? (
+              metrics.k6P99Pass ? 
+                <Badge className="bg-success/20 text-success hover:bg-success/20 text-[9px] px-1 py-0 h-4 border-none">&lt; 5s</Badge> : 
+                <Badge className="bg-destructive/20 text-destructive hover:bg-destructive/20 text-[9px] px-1 py-0 h-4 border-none animate-pulse">BREACH</Badge>
+            ) : null}
           />
           <MetricCard 
             title="RPS" 
@@ -239,7 +265,7 @@ export default function Dashboard() {
             icon={Activity}
           />
           <MetricCard 
-            title="Active Servers" 
+            title="Servers" 
             value={metrics?.activeServers?.toString() || "--"} 
             icon={Server}
           />
@@ -253,7 +279,7 @@ export default function Dashboard() {
           
           {/* Overload indicator */}
           <div className={cn(
-            "col-span-2 rounded-lg border flex flex-col items-center justify-center p-4 transition-colors",
+            "col-span-2 md:col-span-4 rounded-lg border flex flex-col items-center justify-center p-4 transition-colors",
             isOverloaded ? "bg-destructive/10 border-destructive animate-flash-red" : "bg-card border-border"
           )}>
             <div className="flex items-center gap-2">
@@ -270,65 +296,123 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* AI Action Feed */}
-        <Card className="bg-card border-border h-[320px] flex flex-col shadow-lg overflow-hidden">
-          <CardHeader className="py-3 px-4 border-b border-border/50 bg-muted/20 shrink-0">
-            <CardTitle className="text-xs font-mono tracking-widest uppercase flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <ShieldAlert className="h-4 w-4 text-primary" />
-                Alert Feed
-              </span>
-              <span className="flex h-2 w-2 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <ScrollArea className="flex-1 p-0">
-            <div className="flex flex-col">
-              {!alerts || alerts.length === 0 ? (
-                <div className="flex items-center justify-center h-40 text-muted-foreground text-xs font-mono uppercase">
-                  No active alerts
-                </div>
-              ) : (
-                <AnimatePresence initial={false}>
-                  {alerts.map((alert) => (
-                    <motion.div
-                      key={alert.id}
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      className="p-3 border-b border-border/50 text-sm hover:bg-muted/30 transition-colors"
-                    >
-                      <div className="flex justify-between items-start mb-1">
-                        <Badge variant="outline" className={cn(
-                          "text-[10px] uppercase font-mono rounded-sm border-none px-1.5 py-0",
-                          alert.severity === 'critical' ? "bg-destructive/20 text-destructive" :
-                          alert.severity === 'warning' ? "bg-warning/20 text-warning" : "bg-primary/20 text-primary"
-                        )}>
-                          {alert.severity}
-                        </Badge>
-                        <span className="text-[10px] text-muted-foreground font-mono">
-                          {new Date(alert.timestamp).toLocaleTimeString()}
-                        </span>
-                      </div>
-                      <div className="font-bold text-xs uppercase tracking-wide mb-1">{alert.title}</div>
-                      <div className="text-muted-foreground text-[11px] leading-tight mb-2">
-                        {alert.message}
-                      </div>
-                      {alert.aiAction && (
-                        <div className="bg-primary/10 border border-primary/20 rounded p-1.5 text-[10px] font-mono text-primary flex items-start gap-1.5">
-                          <Zap className="h-3 w-3 shrink-0 mt-0.5" />
-                          <span>{alert.aiAction}</span>
+        {/* Sidebar: AI Action Feed and MCP Bridge Status */}
+        <div className="flex flex-col gap-4">
+          <Card className="bg-card border-border flex flex-col shadow-lg overflow-hidden h-[240px]">
+            <CardHeader className="py-3 px-4 border-b border-border/50 bg-muted/20 shrink-0">
+              <CardTitle className="text-xs font-mono tracking-widest uppercase flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 text-primary" />
+                  Alert Feed
+                </span>
+                <span className="flex h-2 w-2 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <ScrollArea className="flex-1 p-0">
+              <div className="flex flex-col">
+                {!alerts || alerts.length === 0 ? (
+                  <div className="flex items-center justify-center h-40 text-muted-foreground text-xs font-mono uppercase">
+                    No active alerts
+                  </div>
+                ) : (
+                  <AnimatePresence initial={false}>
+                    {alerts.map((alert) => (
+                      <motion.div
+                        key={alert.id}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className="p-3 border-b border-border/50 text-sm hover:bg-muted/30 transition-colors"
+                      >
+                        <div className="flex justify-between items-start mb-1">
+                          <Badge variant="outline" className={cn(
+                            "text-[10px] uppercase font-mono rounded-sm border-none px-1.5 py-0",
+                            alert.severity === 'critical' ? "bg-destructive/20 text-destructive" :
+                            alert.severity === 'warning' ? "bg-warning/20 text-warning" : "bg-primary/20 text-primary"
+                          )}>
+                            {alert.severity}
+                          </Badge>
+                          <span className="text-[10px] text-muted-foreground font-mono">
+                            {new Date(alert.timestamp).toLocaleTimeString()}
+                          </span>
                         </div>
-                      )}
-                    </motion.div>
+                        <div className="font-bold text-xs uppercase tracking-wide mb-1">{alert.title}</div>
+                        <div className="text-muted-foreground text-[11px] leading-tight mb-2">
+                          {alert.message}
+                        </div>
+                        {alert.aiAction && (
+                          <div className="bg-primary/10 border border-primary/20 rounded p-1.5 text-[10px] font-mono text-primary flex items-start gap-1.5">
+                            <Zap className="h-3 w-3 shrink-0 mt-0.5" />
+                            <span>{alert.aiAction}</span>
+                          </div>
+                        )}
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                )}
+              </div>
+            </ScrollArea>
+          </Card>
+
+          {/* MCP Bridge Status Widget */}
+          <Card className="bg-card border-border flex flex-col shadow-lg overflow-hidden shrink-0">
+            <CardHeader className="py-3 px-4 border-b border-border/50 bg-muted/20 shrink-0">
+              <CardTitle className="text-xs font-mono tracking-widest uppercase flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <LinkIcon className="h-4 w-4 text-primary" />
+                  MCP Bridge
+                </span>
+                <span className="flex items-center gap-2">
+                  <span className={cn("text-[10px] font-bold tracking-wider",
+                    mcpStatus?.status === "connected" ? "text-success" :
+                    mcpStatus?.status === "simulated" ? "text-warning" : "text-destructive"
+                  )}>
+                    {mcpStatus?.status ? mcpStatus.status.toUpperCase() : "DISCONNECTED"}
+                  </span>
+                  <span className={cn("flex h-2 w-2 relative rounded-full",
+                    mcpStatus?.status === "connected" ? "bg-success" :
+                    mcpStatus?.status === "simulated" ? "bg-warning" : "bg-destructive"
+                  )}>
+                  </span>
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 flex flex-col gap-4 text-sm font-mono bg-black/40">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-muted-foreground flex items-center gap-2">
+                  <Activity className="h-3 w-3" /> Events Forwarded
+                </span>
+                <span className="font-bold text-foreground">{mcpStatus?.eventsForwarded || 0}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-muted-foreground flex items-center gap-2">
+                  <Clock className="h-3 w-3" /> Last Ping
+                </span>
+                <span className="text-foreground">
+                  {mcpStatus?.lastPing ? `${Math.round((Date.now() - mcpStatus.lastPing) / 1000)}s ago` : "--"}
+                </span>
+              </div>
+              <div className="space-y-2">
+                <span className="text-muted-foreground flex items-center gap-2 text-xs">
+                  <Wrench className="h-3 w-3" /> Tools Available ({mcpStatus?.toolsAvailable?.length || 0})
+                </span>
+                <ScrollArea className="h-[60px] w-full rounded border border-border/50 bg-background/50 p-2">
+                  {mcpStatus?.toolsAvailable?.map(tool => (
+                    <div key={tool} className="text-[10px] text-primary/80 mb-1 last:mb-0">
+                      &gt; {tool}
+                    </div>
                   ))}
-                </AnimatePresence>
-              )}
-            </div>
-          </ScrollArea>
-        </Card>
+                  {(!mcpStatus?.toolsAvailable || mcpStatus.toolsAvailable.length === 0) && (
+                    <div className="text-[10px] text-muted-foreground">&gt; No tools active</div>
+                  )}
+                </ScrollArea>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
       </div>
 
@@ -470,13 +554,15 @@ function MetricCard({
   value, 
   icon: Icon,
   alert = false,
-  critical = false
+  critical = false,
+  badge
 }: { 
   title: string; 
-  value: string | number; 
+  value: React.ReactNode; 
   icon: any;
   alert?: boolean;
   critical?: boolean;
+  badge?: React.ReactNode;
 }) {
   return (
     <Card className={cn(
@@ -485,7 +571,7 @@ function MetricCard({
     )}>
       {critical && <div className="absolute inset-0 bg-destructive/5 animate-pulse" />}
       {alert && !critical && <div className="absolute inset-0 bg-warning/5" />}
-      <CardContent className="p-4 relative z-10 flex flex-col">
+      <CardContent className="p-4 relative z-10 flex flex-col h-full">
         <div className="flex justify-between items-start mb-2">
           <span className="text-[10px] font-mono tracking-widest uppercase text-muted-foreground">{title}</span>
           <Icon className={cn(
@@ -493,11 +579,14 @@ function MetricCard({
             critical ? "text-destructive" : alert ? "text-warning" : "text-primary/70"
           )} />
         </div>
-        <div className={cn(
-          "text-2xl font-bold font-mono tracking-tight mt-auto",
-          critical ? "text-destructive" : alert ? "text-warning" : "text-foreground"
-        )}>
-          {value}
+        <div className="flex flex-wrap items-center gap-2 mt-auto">
+          <div className={cn(
+            "text-2xl font-bold font-mono tracking-tight",
+            critical ? "text-destructive" : alert ? "text-warning" : "text-foreground"
+          )}>
+            {value}
+          </div>
+          {badge}
         </div>
       </CardContent>
     </Card>

@@ -2,12 +2,16 @@
 
 export interface SystemMetrics {
   avgLatency: number;
+  p95Latency: number;
+  p99Latency: number;
   cpuUsage: number;
   memoryUsage: number;
   activeServers: number;
   requestsPerSecond: number;
   errorRate: number;
   totalRequests: number;
+  k6P95Pass: boolean;
+  k6P99Pass: boolean;
 }
 
 export interface MetricsSnapshot extends SystemMetrics {
@@ -45,6 +49,33 @@ export interface SimulationState {
 const validTickets = new Set<string>();
 for (let i = 0; i < 100000; i++) {
   validTickets.add(`TICKET_${i}_2026WC`);
+}
+
+// Rolling latency window for percentile computation (last 200 samples)
+const latencyWindow: number[] = [];
+const LATENCY_WINDOW_SIZE = 200;
+// MCP bridge simulated state
+let mcpEventsForwarded = 0;
+let mcpLastPing = Date.now();
+
+function recordLatency(ms: number): void {
+  latencyWindow.push(ms);
+  if (latencyWindow.length > LATENCY_WINDOW_SIZE) latencyWindow.shift();
+}
+
+function computePercentile(sorted: number[], pct: number): number {
+  if (sorted.length === 0) return 0;
+  const idx = Math.ceil((pct / 100) * sorted.length) - 1;
+  return sorted[Math.max(0, idx)];
+}
+
+function getLatencyPercentiles(): { p95: number; p99: number } {
+  if (latencyWindow.length === 0) return { p95: 50, p99: 55 };
+  const sorted = [...latencyWindow].sort((a, b) => a - b);
+  return {
+    p95: Math.round(computePercentile(sorted, 95)),
+    p99: Math.round(computePercentile(sorted, 99)),
+  };
 }
 
 // Mutable state
@@ -163,16 +194,32 @@ function updateMetrics(): void {
     addAlert("warning", "High Latency Detected", `Avg latency at ${state.avgLatency.toFixed(0)}ms — fans experiencing delays at gates.`);
   }
 
+  // Seed percentile window from simulated latency distribution
+  if (simulation.running) {
+    const base = state.avgLatency;
+    recordLatency(base * (0.8 + Math.random() * 0.4));
+    recordLatency(base * (1.0 + Math.random() * 0.6));
+    recordLatency(base * (1.2 + Math.random() * 1.0));
+  }
+  mcpEventsForwarded++;
+  mcpLastPing = Date.now();
+
+  const { p95, p99 } = getLatencyPercentiles();
+
   // Record history
   const snapshot: MetricsSnapshot = {
     timestamp: now,
     avgLatency: Math.round(state.avgLatency),
+    p95Latency: p95,
+    p99Latency: p99,
     cpuUsage: Math.round(state.cpuUsage * 10) / 10,
     memoryUsage: Math.round(state.memoryUsage * 10) / 10,
     activeServers: state.activeServers,
     requestsPerSecond: state.requestsPerSecond,
     errorRate: Math.round(state.errorRate * 10) / 10,
     totalRequests: state.totalRequests,
+    k6P95Pass: p95 < 2000,
+    k6P99Pass: p99 < 5000,
   };
   metricsHistory.push(snapshot);
   // Keep 5 minutes of history at 2-second intervals = 150 samples
@@ -309,14 +356,19 @@ export function getSimulationStatus(): SimulationState {
 }
 
 export function getCurrentMetrics(): SystemMetrics {
+  const { p95, p99 } = getLatencyPercentiles();
   return {
     avgLatency: Math.round(state.avgLatency),
+    p95Latency: p95,
+    p99Latency: p99,
     cpuUsage: Math.round(state.cpuUsage * 10) / 10,
     memoryUsage: Math.round(state.memoryUsage * 10) / 10,
     activeServers: state.activeServers,
     requestsPerSecond: state.requestsPerSecond,
     errorRate: Math.round(state.errorRate * 10) / 10,
     totalRequests: state.totalRequests,
+    k6P95Pass: p95 < 2000,
+    k6P99Pass: p99 < 5000,
   };
 }
 
@@ -404,10 +456,32 @@ export function resetSystem(): void {
     gateEntries: new Map(),
     totalEntered: 0,
   };
+  latencyWindow.length = 0;
+  mcpEventsForwarded = 0;
   alerts = [];
   metricsHistory = [];
   gateStates = GATES.map((g) => ({ ...g }));
   addAlert("info", "System Reset", "All metrics and simulation state cleared.");
+}
+
+export function getMcpStatus() {
+  return {
+    connected: true,
+    serverUrl: "npx @dynatrace-oss/dynatrace-mcp-server@latest",
+    toolsAvailable: [
+      "get_metrics",
+      "get_problems",
+      "get_entities",
+      "get_events",
+      "get_synthetic_locations",
+      "push_metric",
+      "create_event",
+    ],
+    lastPing: mcpLastPing,
+    eventsForwarded: mcpEventsForwarded,
+    dynatraceEnvId: process.env["DYNATRACE_ENV_ID"] ?? null,
+    status: process.env["DYNATRACE_ENV_ID"] ? "connected" : "simulated",
+  } as const;
 }
 
 export function aiAnalyze(): {

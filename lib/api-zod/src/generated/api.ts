@@ -30,12 +30,16 @@ export const ValidateTicketResponse = zod.object({
   "processingTime": zod.number(),
   "metrics": zod.object({
   "avgLatency": zod.number(),
+  "p95Latency": zod.number(),
+  "p99Latency": zod.number(),
   "cpuUsage": zod.number(),
   "memoryUsage": zod.number(),
   "activeServers": zod.number(),
   "requestsPerSecond": zod.number(),
   "errorRate": zod.number(),
-  "totalRequests": zod.number().optional()
+  "totalRequests": zod.number().optional(),
+  "k6P95Pass": zod.boolean().describe('Whether p95 latency is under K6 threshold (2000ms)'),
+  "k6P99Pass": zod.boolean().describe('Whether p99 latency is under K6 threshold (5000ms)')
 }).optional(),
   "error": zod.string().nullish()
 })
@@ -78,12 +82,16 @@ export const GetStadiumCapacityResponse = zod.object({
  */
 export const GetCurrentMetricsResponse = zod.object({
   "avgLatency": zod.number(),
+  "p95Latency": zod.number(),
+  "p99Latency": zod.number(),
   "cpuUsage": zod.number(),
   "memoryUsage": zod.number(),
   "activeServers": zod.number(),
   "requestsPerSecond": zod.number(),
   "errorRate": zod.number(),
-  "totalRequests": zod.number().optional()
+  "totalRequests": zod.number().optional(),
+  "k6P95Pass": zod.boolean().describe('Whether p95 latency is under K6 threshold (2000ms)'),
+  "k6P99Pass": zod.boolean().describe('Whether p99 latency is under K6 threshold (5000ms)')
 })
 
 
@@ -93,11 +101,15 @@ export const GetCurrentMetricsResponse = zod.object({
 export const GetMetricsHistoryResponseItem = zod.object({
   "timestamp": zod.number(),
   "avgLatency": zod.number(),
+  "p95Latency": zod.number(),
+  "p99Latency": zod.number(),
   "cpuUsage": zod.number(),
   "memoryUsage": zod.number(),
   "requestsPerSecond": zod.number(),
   "activeServers": zod.number(),
-  "errorRate": zod.number().optional()
+  "errorRate": zod.number().optional(),
+  "k6P95Pass": zod.boolean().optional(),
+  "k6P99Pass": zod.boolean().optional()
 })
 export const GetMetricsHistoryResponse = zod.array(GetMetricsHistoryResponseItem)
 
@@ -129,12 +141,16 @@ export const ScaleServerResponse = zod.object({
   "activeServers": zod.number(),
   "metrics": zod.object({
   "avgLatency": zod.number(),
+  "p95Latency": zod.number(),
+  "p99Latency": zod.number(),
   "cpuUsage": zod.number(),
   "memoryUsage": zod.number(),
   "activeServers": zod.number(),
   "requestsPerSecond": zod.number(),
   "errorRate": zod.number(),
-  "totalRequests": zod.number().optional()
+  "totalRequests": zod.number().optional(),
+  "k6P95Pass": zod.boolean().describe('Whether p95 latency is under K6 threshold (2000ms)'),
+  "k6P99Pass": zod.boolean().describe('Whether p99 latency is under K6 threshold (5000ms)')
 }).optional()
 })
 
@@ -158,12 +174,16 @@ export const AiAnalyzeResponse = zod.object({
   "serversAdded": zod.number().optional(),
   "metricsAfter": zod.object({
   "avgLatency": zod.number(),
+  "p95Latency": zod.number(),
+  "p99Latency": zod.number(),
   "cpuUsage": zod.number(),
   "memoryUsage": zod.number(),
   "activeServers": zod.number(),
   "requestsPerSecond": zod.number(),
   "errorRate": zod.number(),
-  "totalRequests": zod.number().optional()
+  "totalRequests": zod.number().optional(),
+  "k6P95Pass": zod.boolean().describe('Whether p95 latency is under K6 threshold (2000ms)'),
+  "k6P99Pass": zod.boolean().describe('Whether p99 latency is under K6 threshold (5000ms)')
 }).optional()
 })
 
@@ -209,6 +229,20 @@ export const GetSimulationStatusResponse = zod.object({
   "elapsedSeconds": zod.number(),
   "virtualUsers": zod.number(),
   "nextStage": zod.string().nullish()
+})
+
+
+/**
+ * @summary Get Dynatrace MCP bridge connection status
+ */
+export const GetMcpStatusResponse = zod.object({
+  "connected": zod.boolean(),
+  "serverUrl": zod.string(),
+  "toolsAvailable": zod.array(zod.string()),
+  "lastPing": zod.number(),
+  "eventsForwarded": zod.number(),
+  "dynatraceEnvId": zod.string().nullish(),
+  "status": zod.enum(['connected', 'simulated', 'disconnected']).optional()
 })
 
 

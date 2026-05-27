@@ -48,12 +48,18 @@ export interface SimulationConfig {
 
 export interface SystemMetrics {
   avgLatency: number;
+  p95Latency: number;
+  p99Latency: number;
   cpuUsage: number;
   memoryUsage: number;
   activeServers: number;
   requestsPerSecond: number;
   errorRate: number;
   totalRequests?: number;
+  /** Whether p95 latency is under K6 threshold (2000ms) */
+  k6P95Pass: boolean;
+  /** Whether p99 latency is under K6 threshold (5000ms) */
+  k6P99Pass: boolean;
 }
 
 export interface TicketValidationResult {
@@ -97,11 +103,15 @@ export interface StadiumCapacity {
 export interface MetricsSnapshot {
   timestamp: number;
   avgLatency: number;
+  p95Latency: number;
+  p99Latency: number;
   cpuUsage: number;
   memoryUsage: number;
   requestsPerSecond: number;
   activeServers: number;
   errorRate?: number;
+  k6P95Pass?: boolean;
+  k6P99Pass?: boolean;
 }
 
 export type AlertSeverity = typeof AlertSeverity[keyof typeof AlertSeverity];
@@ -152,6 +162,26 @@ export interface SimulationStatus {
   virtualUsers: number;
   /** @nullable */
   nextStage?: string | null;
+}
+
+export type McpBridgeStatusStatus = typeof McpBridgeStatusStatus[keyof typeof McpBridgeStatusStatus];
+
+
+export const McpBridgeStatusStatus = {
+  connected: 'connected',
+  simulated: 'simulated',
+  disconnected: 'disconnected',
+} as const;
+
+export interface McpBridgeStatus {
+  connected: boolean;
+  serverUrl: string;
+  toolsAvailable: string[];
+  lastPing: number;
+  eventsForwarded: number;
+  /** @nullable */
+  dynatraceEnvId?: string | null;
+  status?: McpBridgeStatusStatus;
 }
 
 export interface OverloadError {

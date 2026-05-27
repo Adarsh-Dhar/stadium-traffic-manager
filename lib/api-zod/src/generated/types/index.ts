@@ -12,6 +12,8 @@ export * from './alertSeverity';
 export * from './gateStatus';
 export * from './gateStatusStatus';
 export * from './healthStatus';
+export * from './mcpBridgeStatus';
+export * from './mcpBridgeStatusStatus';
 export * from './metricsSnapshot';
 export * from './overloadError';
 export * from './resetResult';

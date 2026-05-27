@@ -9,9 +9,13 @@
 export interface MetricsSnapshot {
   timestamp: number;
   avgLatency: number;
+  p95Latency: number;
+  p99Latency: number;
   cpuUsage: number;
   memoryUsage: number;
   requestsPerSecond: number;
   activeServers: number;
   errorRate?: number;
+  k6P95Pass?: boolean;
+  k6P99Pass?: boolean;
 }

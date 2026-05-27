@@ -231,6 +231,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/SimulationStatus"
 
+  /metrics/mcp-status:
+    get:
+      operationId: getMcpStatus
+      tags: [metrics]
+      summary: Get Dynatrace MCP bridge connection status
+      responses:
+        "200":
+          description: MCP bridge status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/McpBridgeStatus"
+
 components:
   schemas:
     HealthStatus:
@@ -333,9 +346,13 @@ components:
 
     SystemMetrics:
       type: object
-      required: [avgLatency, cpuUsage, memoryUsage, activeServers, requestsPerSecond, errorRate]
+      required: [avgLatency, p95Latency, p99Latency, cpuUsage, memoryUsage, activeServers, requestsPerSecond, errorRate, k6P95Pass, k6P99Pass]
       properties:
         avgLatency:
+          type: number
+        p95Latency:
+          type: number
+        p99Latency:
           type: number
         cpuUsage:
           type: number
@@ -349,14 +366,24 @@ components:
           type: number
         totalRequests:
           type: integer
+        k6P95Pass:
+          type: boolean
+          description: "Whether p95 latency is under K6 threshold (2000ms)"
+        k6P99Pass:
+          type: boolean
+          description: "Whether p99 latency is under K6 threshold (5000ms)"
 
     MetricsSnapshot:
       type: object
-      required: [timestamp, avgLatency, cpuUsage, memoryUsage, requestsPerSecond, activeServers]
+      required: [timestamp, avgLatency, p95Latency, p99Latency, cpuUsage, memoryUsage, requestsPerSecond, activeServers]
       properties:
         timestamp:
           type: integer
         avgLatency:
+          type: number
+        p95Latency:
+          type: number
+        p99Latency:
           type: number
         cpuUsage:
           type: number
@@ -368,6 +395,10 @@ components:
           type: integer
         errorRate:
           type: number
+        k6P95Pass:
+          type: boolean
+        k6P99Pass:
+          type: boolean
 
     Alert:
       type: object
@@ -442,6 +473,28 @@ components:
           type: integer
         nextStage:
           type: ["string", "null"]
+
+    McpBridgeStatus:
+      type: object
+      required: [connected, serverUrl, toolsAvailable, lastPing, eventsForwarded]
+      properties:
+        connected:
+          type: boolean
+        serverUrl:
+          type: string
+        toolsAvailable:
+          type: array
+          items:
+            type: string
+        lastPing:
+          type: integer
+        eventsForwarded:
+          type: integer
+        dynatraceEnvId:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [connected, simulated, disconnected]
 
     OverloadError:
       type: object
