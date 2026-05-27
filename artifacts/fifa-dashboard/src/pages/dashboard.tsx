@@ -313,13 +313,13 @@ export default function Dashboard() {
             </CardHeader>
             <ScrollArea className="flex-1 p-0">
               <div className="flex flex-col">
-                {!alerts || alerts.length === 0 ? (
+                {!alerts || !Array.isArray(alerts) || alerts.length === 0 ? (
                   <div className="flex items-center justify-center h-40 text-muted-foreground text-xs font-mono uppercase">
                     No active alerts
                   </div>
                 ) : (
                   <AnimatePresence initial={false}>
-                    {alerts.map((alert) => (
+                    {Array.isArray(alerts) && alerts.map((alert) => (
                       <motion.div
                         key={alert.id}
                         initial={{ opacity: 0, x: 20 }}
@@ -430,10 +430,10 @@ export default function Dashboard() {
           <CardContent className="pt-6">
             <div className="flex flex-col items-center justify-center mb-6">
               <div className="text-5xl font-bold text-foreground font-mono tracking-tighter">
-                {capacity?.currentOccupancy.toLocaleString() || "0"}
+                {capacity?.currentOccupancy ? capacity.currentOccupancy.toLocaleString() : "0"}
               </div>
               <div className="text-xs text-muted-foreground uppercase tracking-widest mt-1">
-                / {capacity?.totalCapacity.toLocaleString() || "80,000"} FANS
+                / {capacity?.totalCapacity ? capacity.totalCapacity.toLocaleString() : "80,000"} FANS
               </div>
             </div>
             
@@ -468,7 +468,7 @@ export default function Dashboard() {
           </CardHeader>
           <ScrollArea className="flex-1">
             <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {capacity?.gates.map(gate => (
+              {capacity?.gates && Array.isArray(capacity.gates) && capacity.gates.map(gate => (
                 <div key={gate.id} className={cn(
                   "border rounded p-3 flex flex-col gap-2 transition-colors",
                   gate.status === 'closed' ? "bg-muted/10 border-border opacity-60" :
