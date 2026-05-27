@@ -503,7 +503,7 @@ export async function aiAnalyze(): Promise<{
 
   const apiKey = process.env.GEMINI_API_KEY || process.env.GENERATIVE_API_KEY || process.env.GOOGLE_API_KEY;
   const apiUrl = process.env.GEMINI_API_URL ||
-    "https://generativelanguage.googleapis.com/v1beta2/models/text-bison-001:generateText";
+    "https://us-models.googleapis.com/v1/models/gemini-2.5-flash:generateText";
 
   async function callModel(promptText: string): Promise<string> {
     const maxAttempts = 2;
