@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "hello": "tsx ./src/hello.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "demo:check": "node demo-health-check.js",
+    "demo:e2e": "node e2e-demo.js",
+    "demo:e2e:surge": "node e2e-demo.js --intensity surge --duration 90",
+    "demo:e2e:quick": "node e2e-demo.js --intensity high --duration 60 --no-start-server"
   },
   "devDependencies": {
     "@types/node": "catalog:",
