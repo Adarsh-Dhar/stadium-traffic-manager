@@ -20,6 +20,7 @@ import {
   getSimulationStatus,
   getMcpStatus,
 } from "../lib/stadium-state.js";
+import { logger } from "../lib/logger.js";
 import {
   getAllMatches,
   getUpcomingMatches,
@@ -124,15 +125,20 @@ router.post("/admin/reset", async (_req, res): Promise<void> => {
 
 // POST /admin/ai-analyze
 router.post("/admin/ai-analyze", async (_req, res): Promise<void> => {
-  const result = aiAnalyze();
-  res.json({
-    status: result.serversAdded > 0 ? "scaled" : "analyzed",
-    analysis: result.analysis,
-    actions: result.actions,
-    confidence: result.confidence,
-    serversAdded: result.serversAdded,
-    metricsAfter: getCurrentMetrics(),
-  });
+  try {
+    const result = await aiAnalyze();
+    res.json({
+      status: result.serversAdded > 0 ? "scaled" : "analyzed",
+      analysis: result.analysis,
+      actions: result.actions,
+      confidence: result.confidence,
+      serversAdded: result.serversAdded,
+      metricsAfter: getCurrentMetrics(),
+    });
+  } catch (err: any) {
+    logger.error({ err }, "/admin/ai-analyze failed");
+    res.status(500).json({ error: "AI analysis failed", details: String(err?.message ?? err) });
+  }
 });
 
 // POST /simulation/start

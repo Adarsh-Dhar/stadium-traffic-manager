@@ -47,6 +47,13 @@ export default function Dashboard() {
   const [tournamentInfo, setTournamentInfo] = useState<TournamentInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // System health + AI analyze state
+  const [systemHealth, setSystemHealth] = useState<{
+    mcp?: any | null;
+    metrics?: any | null;
+  } | null>(null);
+  const [aiResult, setAiResult] = useState<any | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
   useEffect(() => {
     const fetchWorldCupData = async () => {
@@ -113,10 +120,55 @@ export default function Dashboard() {
     };
 
     fetchWorldCupData();
+    // Fetch system health on mount + poll
+    const fetchHealth = async () => {
+      try {
+        const [mcpRes, metricsRes] = await Promise.all([
+          fetch(`${API_BASE}/api/metrics/mcp-status`),
+          fetch(`${API_BASE}/api/metrics/current`),
+        ]);
+        const mcp = mcpRes.ok ? await mcpRes.json() : null;
+        const metrics = metricsRes.ok ? await metricsRes.json() : null;
+        setSystemHealth({ mcp, metrics });
+      } catch (err) {
+        console.error("Failed to fetch system health", err);
+      }
+    };
+
+    fetchHealth();
+    const healthInterval = setInterval(fetchHealth, 5000);
     // Refresh data every 30 seconds
     const interval = setInterval(fetchWorldCupData, 30000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      clearInterval(healthInterval);
+    };
   }, [toast]);
+
+  const handleAiAnalyze = async () => {
+    setAiLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/ai-analyze`, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "unknown" }));
+        toast({ title: "AI Analyze failed", description: err.error || "Unknown error", variant: "destructive" });
+        setAiLoading(false);
+        return;
+      }
+      const data = await res.json();
+      setAiResult(data);
+      toast({ title: "AI Analysis Complete", description: data.analysis?.slice(0, 120) ?? "Analysis ready" });
+      // refresh system health/metrics after action
+      const metricsRes = await fetch(`${API_BASE}/api/metrics/current`);
+      const mcpRes = await fetch(`${API_BASE}/api/metrics/mcp-status`);
+      setSystemHealth({ metrics: metricsRes.ok ? await metricsRes.json() : null, mcp: mcpRes.ok ? await mcpRes.json() : null });
+    } catch (err) {
+      console.error(err);
+      toast({ title: "AI Analyze error", description: "Failed to run AI analysis", variant: "destructive" });
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-6 w-full max-w-[1600px] mx-auto pb-10">
@@ -140,6 +192,84 @@ export default function Dashboard() {
             <div className="text-3xl font-bold text-accent">127 Days</div>
             <p className="text-xs text-muted-foreground">Until Tournament Start</p>
           </div>
+        </div>
+        {/* System Health + AI Panel */}
+        <div className="relative z-10 mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>System Health</CardTitle>
+              <CardDescription>Live system metrics and MCP status</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-muted-foreground">CPU</div>
+                  <div className="font-bold">{systemHealth?.metrics?.cpuUsage ?? "—"}%</div>
+                </div>
+                <Progress value={systemHealth?.metrics?.cpuUsage ?? 0} />
+
+                <div className="flex items-center justify-between mt-2">
+                  <div className="text-sm text-muted-foreground">Avg Latency</div>
+                  <div className="font-bold">{systemHealth?.metrics?.avgLatency ?? "—"}ms</div>
+                </div>
+
+                <div className="flex items-center justify-between mt-2">
+                  <div className="text-sm text-muted-foreground">Active Servers</div>
+                  <div className="font-bold">{systemHealth?.metrics?.activeServers ?? "—"}</div>
+                </div>
+
+                <div className="flex items-center justify-between mt-2">
+                  <div className="text-sm text-muted-foreground">RPS</div>
+                  <div className="font-bold">{systemHealth?.metrics?.requestsPerSecond ?? "—"}</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>AI Analysis</CardTitle>
+              <CardDescription>Run the SRE assistant to analyze current metrics and auto-heal</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-3">
+                <Button onClick={handleAiAnalyze} disabled={aiLoading}>
+                  <Zap className="h-4 w-4" />
+                  {aiLoading ? "Analyzing…" : "Analyze with AI"}
+                </Button>
+                <Badge>{aiResult ? (aiResult.serversAdded > 0 ? "Scaled" : "Analyzed") : "Idle"}</Badge>
+              </div>
+
+              {aiResult && (
+                <div className="mt-4 text-sm">
+                  <div className="font-semibold mb-1">Summary</div>
+                  <div className="text-muted-foreground mb-2">{aiResult.analysis}</div>
+                  <div className="font-semibold mb-1">Actions</div>
+                  <ul className="list-disc ml-5 text-sm mb-2">
+                    {aiResult.actions?.map((a: string, i: number) => (
+                      <li key={i}>{a}</li>
+                    ))}
+                  </ul>
+                  <div className="text-xs text-muted-foreground">Confidence: {(aiResult.confidence ?? 0).toFixed(2)}</div>
+                  {aiResult.serversAdded > 0 && (
+                    <div className="mt-2 text-sm text-green-600">Added {aiResult.serversAdded} server(s)</div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>MCP Status</CardTitle>
+              <CardDescription>Dynatrace MCP / bridge status</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-sm text-muted-foreground">{systemHealth?.mcp?.status ?? "No MCP"}</div>
+              <div className="mt-2 text-xs text-muted-foreground">{systemHealth?.mcp?.dynatraceEnvId ? `Env: ${systemHealth.mcp.dynatraceEnvId}` : systemHealth?.mcp?.serverUrl ?? "Not configured"}</div>
+              <div className="mt-2 text-xs">Tools: {systemHealth?.mcp?.toolsAvailable?.join(", ") ?? "—"}</div>
+            </CardContent>
+          </Card>
         </div>
       </motion.div>
 
