@@ -1,0 +1,22 @@
+{
+  "mcp_server": {
+    "type": "stdio",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@dynatrace-oss/dynatrace-mcp-server@latest"
+    ],
+    "env": {
+      "DYNATRACE_ENV_ID": "${DYNATRACE_ENV_ID}",
+      "DYNATRACE_API_TOKEN": "${DYNATRACE_API_TOKEN}",
+      "DYNATRACE_CLUSTER_URL": "${DYNATRACE_CLUSTER_URL}"
+    }
+  },
+  "tools": [
+    "query_metrics",
+    "get_alerts",
+    "get_problems",
+    "get_entities",
+    "get_timeseries_data"
+  ]
+}

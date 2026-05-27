@@ -9,7 +9,7 @@ const API_BASE = process.env.AI_AGENT_API_BASE || `http://localhost:${process.en
 const INTERVAL = Number(process.env.AGENT_CHECK_INTERVAL || process.env.AI_AGENT_CHECK_INTERVAL || 5000);
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GENERATIVE_API_KEY || process.env.GOOGLE_API_KEY || null;
 const GEMINI_API_URL = process.env.GEMINI_API_URL || "https://us-models.googleapis.com/v1/models/gemini-2.5-flash:generateText";
-const DRY_RUN = (process.env.AI_AGENT_DRY_RUN || "true") === "true";
+const DRY_RUN = (process.env.AI_AGENT_DRY_RUN || "false") === "true";
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -156,14 +156,3 @@ async function mainLoop() {
 if (process.env.NODE_ENV !== "test") {
   mainLoop().catch((err) => console.error("Agent crashed:", err));
 }
-// In agent.js — this is what ties Gemini to Dynatrace via MCP
-const agent = new StadiumTrafficAgent(
-  process.env.GEMINI_API_KEY,
-  {
-    envId: process.env.DYNATRACE_ENV_ID,
-    apiToken: process.env.DYNATRACE_API_TOKEN,
-    clusterUrl: process.env.DYNATRACE_CLUSTER_URL,
-  }
-);
-
-agent.startMonitoring();

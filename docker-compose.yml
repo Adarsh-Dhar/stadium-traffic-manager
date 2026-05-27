@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  api-server:
+    build:
+      context: ./artifacts/api-server
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      PORT: 5000
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      DYNATRACE_ENV_ID: ${DYNATRACE_ENV_ID}
+      DYNATRACE_API_TOKEN: ${DYNATRACE_API_TOKEN}
+      DYNATRACE_CLUSTER_URL: ${DYNATRACE_CLUSTER_URL}
+    networks:
+      - fifa-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mcp-server:
+    image: node:18-alpine
+    working_dir: /app
+    command: sh -c "npx -y @dynatrace-oss/dynatrace-mcp-server@latest"
+    environment:
+      DYNATRACE_ENV_ID: ${DYNATRACE_ENV_ID}
+      DYNATRACE_API_TOKEN: ${DYNATRACE_API_TOKEN}
+      DYNATRACE_CLUSTER_URL: ${DYNATRACE_CLUSTER_URL}
+    networks:
+      - fifa-network
+    depends_on:
+      - api-server
+
+  ai-agent:
+    build:
+      context: ./ai-agent
+      dockerfile: Dockerfile
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      DYNATRACE_ENV_ID: ${DYNATRACE_ENV_ID}
+      DYNATRACE_API_TOKEN: ${DYNATRACE_API_TOKEN}
+      DYNATRACE_CLUSTER_URL: ${DYNATRACE_CLUSTER_URL}
+      AI_AGENT_API_BASE: http://api-server:5000/api/fifa
+      AI_AGENT_DRY_RUN: "false"
+      AGENT_CHECK_INTERVAL: 5000
+    networks:
+      - fifa-network
+    depends_on:
+      - api-server
+
+networks:
+  fifa-network:
+    driver: bridge
