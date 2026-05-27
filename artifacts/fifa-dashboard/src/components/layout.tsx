@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Activity, Server, ActivitySquare, AlertTriangle, Play, Database, Box } from "lucide-react";
+import { Trophy, Zap, Activity, Play, BarChart3, Box } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface LayoutProps {
@@ -16,19 +16,19 @@ export function Layout({ children }: LayoutProps) {
   }, []);
 
   const navItems = [
-    { href: "/", label: "Ops Control", icon: Activity },
-    { href: "/simulation", label: "Simulation", icon: Play },
-    { href: "/metrics", label: "Telemetry", icon: Database },
+    { href: "/", label: "Live Updates", icon: Zap },
+    { href: "/simulation", label: "Match Sim", icon: Play },
+    { href: "/metrics", label: "Stats", icon: BarChart3 },
   ];
 
   return (
     <div className="flex h-screen w-full bg-background text-foreground overflow-hidden font-mono selection:bg-primary/30">
       <aside className="w-16 md:w-64 border-r border-border bg-sidebar flex flex-col items-center md:items-start z-10 shadow-2xl">
         <div className="h-16 flex items-center justify-center md:justify-start md:px-4 w-full border-b border-border text-primary shrink-0 gap-3">
-          <ActivitySquare className="h-6 w-6 shrink-0" />
+          <Trophy className="h-6 w-6 shrink-0" />
           <div className="hidden md:flex flex-col">
-            <span className="font-bold text-sm tracking-widest uppercase leading-none">STADIUM</span>
-            <span className="text-[10px] text-muted-foreground font-mono leading-none">TRAFFIC CONTROL</span>
+            <span className="font-bold text-sm tracking-widest uppercase leading-none">FIFA</span>
+            <span className="text-[10px] text-accent font-mono leading-none">World Cup 2026</span>
           </div>
         </div>
 
@@ -76,8 +76,10 @@ export function Layout({ children }: LayoutProps) {
         
         <header className="h-16 shrink-0 border-b border-border bg-card/50 backdrop-blur flex items-center px-6 justify-between z-10">
           <div className="flex items-center gap-4">
-            <div className="h-4 w-1 bg-primary"></div>
-            <h1 className="text-sm font-bold uppercase tracking-widest text-primary/80">Terminal {location.toUpperCase() || '/'}</h1>
+            <div className="h-4 w-1 bg-accent"></div>
+            <h1 className="text-sm font-bold uppercase tracking-widest text-primary">
+              {location === "/" ? "🔴 LIVE" : location.toUpperCase().replace("/", "")}
+            </h1>
           </div>
           <div className="flex items-center gap-4 text-xs font-mono text-muted-foreground">
             <div className="flex items-center gap-2">

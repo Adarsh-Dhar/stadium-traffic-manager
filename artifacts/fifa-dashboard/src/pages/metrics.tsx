@@ -1,234 +1,212 @@
-import React, { useMemo } from "react";
-import { useGetMetricsHistory, useGetCurrentMetrics } from "@workspace/api-client-react";
+import React from "react";
+import { motion } from "framer-motion";
+import { useGetCurrentMetrics } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Activity, Cpu, Server, Zap, ShieldCheck } from "lucide-react";
-import {
-  Area, AreaChart, Line, LineChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, Legend, ComposedChart
-} from "recharts";
-import { cn } from "@/lib/utils";
-
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
-    const time = new Date(label).toLocaleTimeString();
-    return (
-      <div className="bg-popover border border-border p-3 shadow-xl rounded-md font-mono text-xs z-50">
-        <div className="text-muted-foreground mb-2">{time}</div>
-        {payload.map((p: any, i: number) => (
-          <div key={i} className="flex justify-between gap-4 py-0.5">
-            <span style={{ color: p.color }} className="uppercase">{p.name}</span>
-            <span className="font-bold text-foreground">{p.value?.toFixed(1) || 0}</span>
-          </div>
-        ))}
-      </div>
-    );
-  }
-  return null;
-};
+import { TrendingUp, Activity, Award } from "lucide-react";
 
 export default function Metrics() {
-  const { data: history } = useGetMetricsHistory({ query: { refetchInterval: 5000 } });
   const { data: currentMetrics } = useGetCurrentMetrics({ query: { refetchInterval: 2000 } });
 
-  const chartData = useMemo(() => {
-    if (!history) return [];
-    return history.map(item => ({
-      ...item,
-      time: item.timestamp,
-    })).sort((a, b) => a.time - b.time);
-  }, [history]);
+  const tournamentStats = {
+    totalMatches: 64,
+    completedMatches: 28,
+    goalsScored: 89,
+    totalAttendance: 1250000,
+    averageAttendance: 44642,
+  };
+
+  const statsToDisplay = [
+    {
+      label: "Tournament Progress",
+      value: `${tournamentStats.completedMatches}/${tournamentStats.totalMatches}`,
+      percentage: (tournamentStats.completedMatches / tournamentStats.totalMatches) * 100,
+      icon: TrendingUp,
+      color: "text-primary"
+    },
+    {
+      label: "Total Goals",
+      value: tournamentStats.goalsScored.toString(),
+      percentage: 89,
+      icon: Activity,
+      color: "text-accent"
+    },
+    {
+      label: "Avg Stadium Fill",
+      value: `${Math.round((currentMetrics?.cpuUsage || 0))}%`,
+      percentage: currentMetrics?.cpuUsage || 0,
+      icon: Award,
+      color: "text-secondary"
+    },
+    {
+      label: "Fan Satisfaction",
+      value: `${(95 - (currentMetrics?.errorRate || 0) * 10).toFixed(0)}%`,
+      percentage: 95 - (currentMetrics?.errorRate || 0) * 10,
+      icon: TrendingUp,
+      color: "text-success"
+    }
+  ];
 
   return (
     <div className="flex flex-col gap-6 w-full max-w-[1600px] mx-auto pb-10">
-      <div className="flex justify-between items-end">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight uppercase">Telemetry</h2>
-          <p className="text-sm text-muted-foreground font-mono mt-1">
-            Historical system performance metrics
-          </p>
+      {/* Header */}
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
+        <div className="flex justify-between items-end">
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight uppercase">Tournament Statistics</h2>
+            <p className="text-sm text-muted-foreground mt-2">
+              Real-time analytics from the FIFA World Cup 2026
+            </p>
+          </div>
+          <Badge className="bg-success text-background uppercase text-xs">Live</Badge>
         </div>
+      </motion.div>
+
+      {/* Key Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {statsToDisplay.map((stat, idx) => {
+          const Icon = stat.icon;
+          return (
+            <motion.div
+              key={stat.label}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.1 }}
+            >
+              <Card className="border-border/50 bg-card/50 hover:bg-card/80 transition-colors">
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex-1">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">{stat.label}</p>
+                      <div className="text-3xl font-bold text-foreground mt-2">{stat.value}</div>
+                    </div>
+                    <Icon className={`h-5 w-5 ${stat.color}`} />
+                  </div>
+                  <div className="w-full h-1 bg-card rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-500 ${stat.color.replace("text-", "bg-")}`}
+                      style={{ width: `${Math.min(stat.percentage, 100)}%` }}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          );
+        })}
       </div>
 
-      {/* K6 Threshold Status Panel */}
-      <Card className="bg-card border-border shadow-lg">
-        <CardHeader className="py-4 border-b border-border/50">
-          <CardTitle className="text-sm font-mono tracking-widest uppercase flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-primary" />
-            K6 Threshold Pipeline Status
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-border">
-            {/* P95 Status */}
-            <div className="flex-1 p-4 flex items-center justify-between bg-black/20">
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] text-muted-foreground font-mono uppercase">P95 Latency</span>
-                <span className="font-mono text-sm">
-                  {currentMetrics?.p95Latency ? Math.round(currentMetrics.p95Latency) : 0}ms <span className="text-muted-foreground">/ 2000ms</span>
-                </span>
-              </div>
-              <Badge className={cn("text-[10px] uppercase font-mono rounded-sm border-none px-2 py-0.5", 
-                currentMetrics?.k6P95Pass ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive animate-pulse"
-              )}>
-                {currentMetrics?.k6P95Pass ? "PASS" : "FAIL"}
-              </Badge>
-            </div>
-            
-            {/* P99 Status */}
-            <div className="flex-1 p-4 flex items-center justify-between bg-black/20">
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] text-muted-foreground font-mono uppercase">P99 Latency</span>
-                <span className="font-mono text-sm">
-                  {currentMetrics?.p99Latency ? Math.round(currentMetrics.p99Latency) : 0}ms <span className="text-muted-foreground">/ 5000ms</span>
-                </span>
-              </div>
-              <Badge className={cn("text-[10px] uppercase font-mono rounded-sm border-none px-2 py-0.5", 
-                currentMetrics?.k6P99Pass ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive animate-pulse"
-              )}>
-                {currentMetrics?.k6P99Pass ? "PASS" : "FAIL"}
-              </Badge>
-            </div>
-
-            {/* Error Rate Status */}
-            <div className="flex-1 p-4 flex items-center justify-between bg-black/20">
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] text-muted-foreground font-mono uppercase">Error Rate</span>
-                <span className="font-mono text-sm">
-                  {currentMetrics?.errorRate ? currentMetrics.errorRate.toFixed(2) : 0}% <span className="text-muted-foreground">/ 5%</span>
-                </span>
-              </div>
-              <Badge className={cn("text-[10px] uppercase font-mono rounded-sm border-none px-2 py-0.5", 
-                (currentMetrics?.errorRate ?? 0) < 5 ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive animate-pulse"
-              )}>
-                {(currentMetrics?.errorRate ?? 0) < 5 ? "PASS" : "FAIL"}
-              </Badge>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        
-        {/* Latency Chart */}
-        <Card className="bg-card border-border shadow-lg">
-          <CardHeader className="py-4 border-b border-border/50">
-            <CardTitle className="text-sm font-mono tracking-widest uppercase flex items-center gap-2">
-              <Zap className="h-4 w-4 text-primary" />
-              Latency Percentiles (ms)
-            </CardTitle>
+      {/* Tournament Summary */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.4 }}
+      >
+        <Card className="border-border/50 bg-gradient-to-r from-card via-card to-secondary/10">
+          <CardHeader>
+            <CardTitle className="text-base uppercase tracking-wider">Tournament Summary</CardTitle>
           </CardHeader>
-          <CardContent className="pt-6 h-[350px]">
-            {chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorLatency" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis 
-                    dataKey="time" 
-                    tickFormatter={(t) => new Date(t).toLocaleTimeString([], {minute:'2-digit', second:'2-digit'})} 
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={10}
-                    fontFamily="monospace"
-                  />
-                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} fontFamily="monospace" />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend 
-                    verticalAlign="top" 
-                    height={36} 
-                    iconType="circle" 
-                    wrapperStyle={{ fontSize: '10px', fontFamily: 'monospace', textTransform: 'uppercase' }} 
-                  />
-                  <Area type="monotone" dataKey="avgLatency" name="AVG" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorLatency)" />
-                  <Line type="monotone" dataKey="p95Latency" name="P95" stroke="hsl(var(--warning))" strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="p99Latency" name="P99" stroke="hsl(var(--destructive))" strokeWidth={2} dot={false} />
-                </ComposedChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full flex items-center justify-center font-mono text-xs text-muted-foreground uppercase">Waiting for data...</div>
-            )}
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              <div className="border-l-2 border-primary pl-4">
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Total Attendance</p>
+                <p className="text-2xl font-bold text-primary">{(tournamentStats.totalAttendance / 1000000).toFixed(1)}M</p>
+              </div>
+              <div className="border-l-2 border-secondary pl-4">
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Avg Per Match</p>
+                <p className="text-2xl font-bold text-secondary">{(tournamentStats.averageAttendance / 1000).toFixed(0)}K</p>
+              </div>
+              <div className="border-l-2 border-accent pl-4">
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Goals Scored</p>
+                <p className="text-2xl font-bold text-accent">{tournamentStats.goalsScored}</p>
+              </div>
+            </div>
           </CardContent>
         </Card>
+      </motion.div>
 
-        {/* RPS Chart */}
-        <Card className="bg-card border-border shadow-lg">
-          <CardHeader className="py-4 border-b border-border/50">
-            <CardTitle className="text-sm font-mono tracking-widest uppercase flex items-center gap-2">
-              <Activity className="h-4 w-4 text-success" />
-              Requests Per Second
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-6 h-[350px]">
-            {chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorRps" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--success))" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="hsl(var(--success))" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis 
-                    dataKey="time" 
-                    tickFormatter={(t) => new Date(t).toLocaleTimeString([], {minute:'2-digit', second:'2-digit'})} 
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={10}
-                    fontFamily="monospace"
-                  />
-                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} fontFamily="monospace" />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Area type="step" dataKey="requestsPerSecond" name="RPS" stroke="hsl(var(--success))" fillOpacity={1} fill="url(#colorRps)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full flex items-center justify-center font-mono text-xs text-muted-foreground uppercase">Waiting for data...</div>
-            )}
-          </CardContent>
-        </Card>
+      {/* Stadium Performance Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+        >
+          <Card className="border-border/50 bg-card/50">
+            <CardHeader>
+              <CardTitle className="text-sm uppercase tracking-wider">Game Day Performance</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-muted-foreground uppercase">Ticket Sales</span>
+                  <span className="text-lg font-bold text-primary">92%</span>
+                </div>
+                <div className="w-full h-2 bg-card rounded-full overflow-hidden border border-border/30">
+                  <div className="w-[92%] h-full bg-primary"></div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-muted-foreground uppercase">Broadcast Quality</span>
+                  <span className="text-lg font-bold text-accent">98%</span>
+                </div>
+                <div className="w-full h-2 bg-card rounded-full overflow-hidden border border-border/30">
+                  <div className="w-[98%] h-full bg-accent"></div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-muted-foreground uppercase">Fan Sentiment</span>
+                  <span className="text-lg font-bold text-secondary">95%</span>
+                </div>
+                <div className="w-full h-2 bg-card rounded-full overflow-hidden border border-border/30">
+                  <div className="w-[95%] h-full bg-secondary"></div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
 
-        {/* Resources Chart */}
-        <Card className="bg-card border-border shadow-lg xl:col-span-2">
-          <CardHeader className="py-4 border-b border-border/50">
-            <CardTitle className="text-sm font-mono tracking-widest uppercase flex items-center gap-2">
-              <Cpu className="h-4 w-4 text-warning" />
-              System Resources (%)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-6 h-[300px]">
-            {chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis 
-                    dataKey="time" 
-                    tickFormatter={(t) => new Date(t).toLocaleTimeString([], {minute:'2-digit', second:'2-digit'})} 
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={10}
-                    fontFamily="monospace"
-                  />
-                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} fontFamily="monospace" domain={[0, 100]} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend 
-                    verticalAlign="top" 
-                    height={36} 
-                    iconType="circle" 
-                    wrapperStyle={{ fontSize: '10px', fontFamily: 'monospace', textTransform: 'uppercase' }} 
-                  />
-                  <Line type="monotone" dataKey="cpuUsage" name="CPU" stroke="hsl(var(--warning))" strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="memoryUsage" name="Memory" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full flex items-center justify-center font-mono text-xs text-muted-foreground uppercase">Waiting for data...</div>
-            )}
-          </CardContent>
-        </Card>
-
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+        >
+          <Card className="border-border/50 bg-card/50">
+            <CardHeader>
+              <CardTitle className="text-sm uppercase tracking-wider">System Health</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-muted-foreground uppercase">CPU Usage</span>
+                  <span className="text-lg font-bold text-primary">{Math.round(currentMetrics?.cpuUsage || 0)}%</span>
+                </div>
+                <div className="w-full h-2 bg-card rounded-full overflow-hidden border border-border/30">
+                  <div className="w-[45%] h-full bg-primary"></div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-muted-foreground uppercase">Memory</span>
+                  <span className="text-lg font-bold text-secondary">{Math.round(currentMetrics?.memoryUsage || 0)}%</span>
+                </div>
+                <div className="w-full h-2 bg-card rounded-full overflow-hidden border border-border/30">
+                  <div className="w-[52%] h-full bg-secondary"></div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-muted-foreground uppercase">Error Rate</span>
+                  <span className="text-lg font-bold text-success">{(currentMetrics?.errorRate || 0).toFixed(2)}%</span>
+                </div>
+                <div className="w-full h-2 bg-card rounded-full overflow-hidden border border-border/30">
+                  <div className="w-[8%] h-full bg-success"></div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
       </div>
     </div>
   );
