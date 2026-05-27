@@ -1,18 +1,54 @@
 import React from "react";
-import { 
-  useGetSimulationStatus, 
-  useStartSimulation, 
+import { motion } from "framer-motion";
+import {
+  useGetSimulationStatus,
+  useStartSimulation,
   useStopSimulation,
   getGetSimulationStatusQueryKey
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Play, Square, Activity, Users, Zap, Loader2 } from "lucide-react";
+import { Play, Square, Zap, Users, Trophy, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+
+const MATCH_SCENARIOS = [
+  {
+    id: "low",
+    name: "Group Stage",
+    emoji: "⚽",
+    desc: "Calm pre-match atmosphere, steady crowd arrival",
+    color: "bg-success/20 text-success border-success/30",
+    icon: "🥇"
+  },
+  {
+    id: "medium",
+    name: "Knockout Round",
+    emoji: "⚡",
+    desc: "Intense competition, moderate crowd energy",
+    color: "bg-primary/20 text-primary border-primary/30",
+    icon: "🥈"
+  },
+  {
+    id: "high",
+    name: "Semi-Finals",
+    emoji: "🔥",
+    desc: "Peak excitement, high-volume crowd surge",
+    color: "bg-warning/20 text-warning border-warning/30",
+    icon: "🏆"
+  },
+  {
+    id: "surge",
+    name: "Championship Match",
+    emoji: "💥",
+    desc: "Maximum tension, 80,000 fans erupting",
+    color: "bg-destructive/20 text-destructive border-destructive/30",
+    icon: "👑"
+  },
+];
 
 export default function Simulation() {
   const queryClient = useQueryClient();
@@ -22,13 +58,16 @@ export default function Simulation() {
   const startSim = useStartSimulation();
   const stopSim = useStopSimulation();
 
-  const handleStart = (intensity: "low"|"medium"|"high"|"surge") => {
+  const handleStart = (intensity: "low" | "medium" | "high" | "surge") => {
     startSim.mutate(
       { data: { intensity } },
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getGetSimulationStatusQueryKey() });
-          toast({ title: `Simulation started`, description: `Intensity set to ${intensity.toUpperCase()}` });
+          toast({
+            title: "Match Simulation Started",
+            description: `Simulating ${MATCH_SCENARIOS.find(s => s.id === intensity)?.name} scenario...`
+          });
         }
       }
     );
@@ -38,113 +77,162 @@ export default function Simulation() {
     stopSim.mutate(undefined, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetSimulationStatusQueryKey() });
-        toast({ title: "Simulation stopped" });
+        toast({ title: "Match Simulation Ended", description: "Crowd has dispersed" });
       }
     });
   };
 
   const isRunning = status?.running || false;
-
-  const intensities: { id: "low"|"medium"|"high"|"surge", label: string, desc: string, color: string }[] = [
-    { id: "low", label: "Low Traffic", desc: "Steady trickle of early arrivals", color: "bg-success/20 text-success border-success/30" },
-    { id: "medium", label: "Medium", desc: "Normal pre-game crowd flow", color: "bg-primary/20 text-primary border-primary/30" },
-    { id: "high", label: "High Volume", desc: "Peak entry time (T-30 mins)", color: "bg-warning/20 text-warning border-warning/30" },
-    { id: "surge", label: "Massive Surge", desc: "80,000 fan simultaneous hit", color: "bg-destructive/20 text-destructive border-destructive/30" },
-  ];
+  const crowdSize = status?.virtualUsers || 0;
+  const crowdPercentage = Math.min((crowdSize / 80000) * 100, 100);
 
   return (
-    <div className="flex flex-col gap-6 w-full max-w-4xl mx-auto">
+    <div className="flex flex-col gap-6 w-full max-w-5xl mx-auto pb-10">
+      {/* Header */}
       <div>
-        <h2 className="text-2xl font-bold tracking-tight uppercase">Load Generator</h2>
-        <p className="text-sm text-muted-foreground font-mono mt-1">
-          Stress-test the system with virtual crowd surges
+        <h2 className="text-3xl font-bold tracking-tight uppercase flex items-center gap-3">
+          <span>⚽ Match Simulator</span>
+        </h2>
+        <p className="text-sm text-muted-foreground mt-2">
+          Simulate different match scenarios to test stadium operations during tournament
         </p>
       </div>
 
-      <Card className="bg-card border-border shadow-lg">
-        <CardHeader className="border-b border-border/50 py-4">
-          <CardTitle className="text-sm font-mono tracking-widest uppercase flex items-center gap-2">
-            <Activity className="h-4 w-4 text-primary" />
-            Current Status
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="pt-6">
-          <div className="flex flex-col md:flex-row gap-8 items-center justify-between">
-            <div className="flex flex-col items-center justify-center flex-1 w-full border border-dashed border-border/50 rounded-lg p-6 bg-muted/5 relative overflow-hidden">
-              {isRunning && <div className="absolute inset-0 bg-primary/5 animate-pulse" />}
-              <span className="text-xs text-muted-foreground uppercase font-mono mb-2">Virtual Users</span>
-              <div className="text-6xl font-bold font-mono tracking-tighter flex items-center gap-4 text-primary">
-                {status?.virtualUsers?.toLocaleString() || "0"}
-                {isRunning && <Loader2 className="w-8 h-8 animate-spin opacity-50" />}
+      {/* Live Status Card */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        <Card className="bg-gradient-to-r from-card via-card to-secondary/10 border-border shadow-lg">
+          <CardHeader className="border-b border-border/50">
+            <CardTitle className="text-sm font-semibold uppercase tracking-wider flex items-center gap-2">
+              <Zap className="h-4 w-4 text-accent" />
+              Live Stadium Status
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-6 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Crowd Count */}
+              <div className="flex flex-col items-center justify-center p-6 border border-dashed border-border/50 rounded-lg bg-muted/5">
+                <span className="text-xs text-muted-foreground uppercase font-mono mb-2">Current Attendance</span>
+                <div className="text-5xl font-bold text-primary">
+                  {(crowdSize / 1000).toFixed(0)}K
+                </div>
+                <span className="text-xs text-muted-foreground mt-2">of 80,000 capacity</span>
               </div>
-              <div className="mt-4 flex gap-2">
-                <Badge variant="outline" className={cn(
-                  "font-mono uppercase px-2 py-0 text-[10px]",
-                  isRunning ? "bg-primary/20 text-primary border-none" : "bg-muted text-muted-foreground border-none"
-                )}>
-                  {isRunning ? "RUNNING" : "IDLE"}
-                </Badge>
-                {isRunning && status?.stage && (
-                  <Badge variant="outline" className="font-mono uppercase px-2 py-0 text-[10px] bg-secondary text-secondary-foreground border-none">
-                    STAGE: {status.stage}
-                  </Badge>
-                )}
-                {isRunning && status?.intensity && (
-                  <Badge variant="outline" className="font-mono uppercase px-2 py-0 text-[10px] bg-warning/20 text-warning border-none">
-                    {status.intensity}
-                  </Badge>
+
+              {/* Stadium Fullness */}
+              <div className="flex flex-col justify-between p-6 border border-dashed border-border/50 rounded-lg bg-muted/5">
+                <div>
+                  <span className="text-xs text-muted-foreground uppercase font-mono mb-3 block">Stadium Occupancy</span>
+                  <div className="text-4xl font-bold text-secondary mb-3">{crowdPercentage.toFixed(0)}%</div>
+                </div>
+                <Progress value={crowdPercentage} className="h-2 bg-card border border-border/50" />
+              </div>
+
+              {/* Status Indicator */}
+              <div className="flex flex-col items-center justify-center p-6 border border-dashed border-border/50 rounded-lg bg-muted/5">
+                {isRunning ? (
+                  <>
+                    <Loader2 className="w-8 h-8 animate-spin text-accent mb-2" />
+                    <span className="text-sm font-bold text-accent uppercase">Match In Progress</span>
+                  </>
+                ) : (
+                  <>
+                    <Trophy className="w-8 h-8 text-muted-foreground/50 mb-2" />
+                    <span className="text-sm font-bold text-muted-foreground uppercase">Awaiting Match</span>
+                  </>
                 )}
               </div>
             </div>
 
-            <div className="flex flex-col w-full md:w-48 gap-4 shrink-0">
-              <Button 
-                variant="destructive"
-                className="w-full font-mono uppercase tracking-widest h-12"
-                onClick={handleStop}
-                disabled={!isRunning || stopSim.isPending}
-                data-testid="button-stop-sim"
-              >
-                <Square className="w-4 h-4 mr-2 fill-current" />
-                ABORT SIM
-              </Button>
-              <div className="text-center text-[10px] text-muted-foreground font-mono">
-                Running time: {status?.elapsedSeconds || 0}s
-              </div>
+            {/* Controls */}
+            <div className="flex gap-3 pt-4 border-t border-border/30">
+              {isRunning && (
+                <Button
+                  onClick={handleStop}
+                  variant="destructive"
+                  className="flex items-center gap-2"
+                >
+                  <Square className="h-4 w-4" />
+                  End Simulation
+                </Button>
+              )}
+              {!isRunning && (
+                <span className="text-xs text-muted-foreground">Select a scenario to begin</span>
+              )}
             </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* Scenario Selection */}
+      <div>
+        <h3 className="text-lg font-bold uppercase tracking-wider text-foreground mb-4">Match Scenarios</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {MATCH_SCENARIOS.map((scenario, idx) => (
+            <motion.div
+              key={scenario.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.1 }}
+            >
+              <Card
+                className={cn(
+                  "border-2 cursor-pointer transition-all hover:shadow-lg hover:scale-105",
+                  isRunning && status?.virtualUsers ? "opacity-50 cursor-not-allowed" : ""
+                )}
+                onClick={() => !isRunning && handleStart(scenario.id as "low" | "medium" | "high" | "surge")}
+              >
+                <CardContent className="p-6">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="text-4xl">{scenario.emoji}</div>
+                      <div className="text-2xl">{scenario.icon}</div>
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold uppercase tracking-wider text-foreground">{scenario.name}</h4>
+                      <p className="text-xs text-muted-foreground mt-1">{scenario.desc}</p>
+                    </div>
+                    <div className="flex items-center justify-between pt-2">
+                      <Badge className={scenario.color}>
+                        {scenario.name}
+                      </Badge>
+                      <Play className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+
+      {/* Stadium Insights */}
+      <Card className="border-border/50 bg-card/50">
+        <CardHeader>
+          <CardTitle className="text-base uppercase tracking-wider">Simulation Insights</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-4 rounded-lg border border-border/30 bg-muted/5">
+              <div className="text-sm font-semibold text-muted-foreground uppercase mb-2">Peak Capacity</div>
+              <div className="text-2xl font-bold text-primary">{status?.peakLoad || "0"}%</div>
+              <p className="text-xs text-muted-foreground mt-1">Maximum system load during simulation</p>
+            </div>
+            <div className="p-4 rounded-lg border border-border/30 bg-muted/5">
+              <div className="text-sm font-semibold text-muted-foreground uppercase mb-2">Avg Response Time</div>
+              <div className="text-2xl font-bold text-accent">{status?.avgLatency || "0"}ms</div>
+              <p className="text-xs text-muted-foreground mt-1">Average system response time</p>
+            </div>
+          </div>
+          <div className="p-4 rounded-lg border border-primary/30 bg-primary/5">
+            <p className="text-xs text-muted-foreground">
+              💡 Tip: Start with Group Stage to warm up the system, then progress to Championship Match for maximum stress testing. Monitor stadium occupancy and system metrics in real-time.
+            </p>
           </div>
         </CardContent>
       </Card>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {intensities.map((preset) => (
-          <Card key={preset.id} className={cn(
-            "bg-card border transition-all cursor-pointer hover:border-primary/50 relative overflow-hidden",
-            isRunning && status?.intensity === preset.id ? preset.color : "border-border"
-          )}
-          onClick={() => !isRunning && handleStart(preset.id)}
-          >
-            {isRunning && status?.intensity === preset.id && (
-              <div className="absolute inset-0 bg-current opacity-5 animate-pulse" />
-            )}
-            <CardHeader className="py-4">
-              <CardTitle className="text-sm font-bold uppercase tracking-wider">{preset.label}</CardTitle>
-              <CardDescription className="text-xs font-mono">{preset.desc}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button 
-                variant="outline"
-                className="w-full font-mono text-xs uppercase"
-                disabled={isRunning || startSim.isPending}
-                data-testid={`button-start-sim-${preset.id}`}
-                onClick={(e) => { e.stopPropagation(); handleStart(preset.id); }}
-              >
-                <Play className="w-3 h-3 mr-2" /> Execute {preset.id}
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
     </div>
   );
 }
