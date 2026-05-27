@@ -1,5 +1,6 @@
 // In-memory simulation state for the FIFA ticketing system
 import { logger } from "./logger.js";
+import { pushMetrics, pushEvent } from "./dynatrace.js";
 
 export interface SystemMetrics {
   avgLatency: number;
@@ -143,6 +144,12 @@ function addAlert(
   alerts.unshift(alert);
   // Keep max 50 alerts
   if (alerts.length > 50) alerts = alerts.slice(0, 50);
+
+  // Forward critical/warning alerts to Dynatrace events
+  if (severity === "critical" || severity === "warning") {
+    const dtSeverity = severity === "critical" ? "CUSTOM_ALERT" : "INFO";
+    pushEvent(title, message, dtSeverity).catch(() => {/* silent */});
+  }
 }
 
 function resolveAlerts(severity?: Alert["severity"]): void {
@@ -225,6 +232,20 @@ function updateMetrics(): void {
   metricsHistory.push(snapshot);
   // Keep 5 minutes of history at 2-second intervals = 150 samples
   if (metricsHistory.length > 150) metricsHistory.shift();
+
+  // Push to Dynatrace (silent no-op when credentials not set)
+  pushMetrics({
+    avgLatency:        snapshot.avgLatency,
+    p95Latency:        snapshot.p95Latency,
+    p99Latency:        snapshot.p99Latency,
+    cpuUsage:          snapshot.cpuUsage,
+    memoryUsage:       snapshot.memoryUsage,
+    activeServers:     snapshot.activeServers,
+    requestsPerSecond: snapshot.requestsPerSecond,
+    errorRate:         snapshot.errorRate,
+    totalRequests:     snapshot.totalRequests,
+    virtualUsers:      simulation.virtualUsers,
+  }, now).catch(() => {/* silent */});
 }
 
 // Simulation stages
@@ -535,13 +556,14 @@ export async function aiAnalyze(): Promise<{
 
         const json = await resp.json().catch(() => null);
         // Try to extract the best text candidate from common shapes
+        const j: any = json;
         let out = "";
-        if (!json) out = "";
-        else if (Array.isArray(json?.candidates) && json.candidates[0]) out = json.candidates[0].content ?? JSON.stringify(json.candidates[0]);
-        else if (json?.candidates?.[0]?.output) out = json.candidates[0].output;
-        else if (json?.output?.[0]?.content) out = json.output[0].content;
-        else if (typeof json?.result === "string") out = json.result;
-        else out = JSON.stringify(json);
+        if (!j) out = "";
+        else if (Array.isArray(j.candidates) && j.candidates[0]) out = j.candidates[0].content ?? JSON.stringify(j.candidates[0]);
+        else if (j.candidates?.[0]?.output) out = j.candidates[0].output;
+        else if (j.output?.[0]?.content) out = j.output[0].content;
+        else if (typeof j.result === "string") out = j.result;
+        else out = JSON.stringify(j);
 
         return out;
       } catch (err: any) {
