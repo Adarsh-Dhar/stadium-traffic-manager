@@ -75,45 +75,45 @@
 
 /* Force dark mode ops center theme universally */
 :root, .dark {
-  --button-outline: rgba(255,255,255, .10);
-  --badge-outline: rgba(255,255,255, .05);
+  --button-outline: rgba(212,165,0, .15);
+  --badge-outline: rgba(212,165,0, .08);
   --opaque-button-border-intensity: 9; 
-  --elevate-1: rgba(255,255,255, .04);
-  --elevate-2: rgba(255,255,255, .09);
+  --elevate-1: rgba(212,165,0, .06);
+  --elevate-2: rgba(212,165,0, .12);
 
-  --background: 220 30% 4%; 
-  --foreground: 210 20% 90%; 
+  --background: 220 60% 5%; 
+  --foreground: 210 40% 95%; 
 
-  --border: 220 20% 12%; 
+  --border: 160 50% 25%; 
   
-  --card: 220 25% 6%;
-  --card-foreground: 210 20% 90%;
-  --card-border: 220 20% 12%;
+  --card: 220 50% 8%;
+  --card-foreground: 210 40% 95%;
+  --card-border: 160 50% 25%;
 
-  --sidebar: 220 30% 3%;
-  --sidebar-foreground: 210 20% 80%;
-  --sidebar-border: 220 20% 10%;
-  --sidebar-primary: 190 90% 50%;
-  --sidebar-primary-foreground: 220 30% 5%;
-  --sidebar-accent: 220 20% 10%;
-  --sidebar-accent-foreground: 210 20% 90%;
-  --sidebar-ring: 190 90% 50%;
+  --sidebar: 220 60% 4%;
+  --sidebar-foreground: 210 40% 90%;
+  --sidebar-border: 160 50% 25%;
+  --sidebar-primary: 45 100% 51%;
+  --sidebar-primary-foreground: 220 60% 5%;
+  --sidebar-accent: 160 50% 25%;
+  --sidebar-accent-foreground: 210 40% 95%;
+  --sidebar-ring: 45 100% 51%;
 
-  --popover: 220 25% 6%;
-  --popover-foreground: 210 20% 90%;
-  --popover-border: 220 20% 15%;
+  --popover: 220 50% 8%;
+  --popover-foreground: 210 40% 95%;
+  --popover-border: 160 50% 28%;
 
-  --primary: 190 90% 50%; 
-  --primary-foreground: 220 30% 5%;
+  --primary: 45 100% 51%; 
+  --primary-foreground: 220 60% 5%;
 
-  --secondary: 220 20% 12%;
-  --secondary-foreground: 210 20% 90%;
+  --secondary: 160 50% 25%;
+  --secondary-foreground: 210 40% 95%;
 
-  --muted: 220 20% 12%;
-  --muted-foreground: 210 20% 60%;
+  --muted: 220 20% 30%;
+  --muted-foreground: 210 20% 70%;
 
-  --accent: 190 90% 50%;
-  --accent-foreground: 220 30% 5%;
+  --accent: 30 100% 50%;
+  --accent-foreground: 220 60% 5%;
 
   --destructive: 0 80% 60%;
   --destructive-foreground: 0 0% 100%;
@@ -121,11 +121,11 @@
   --warning: 35 90% 50%;
   --warning-foreground: 220 30% 5%;
   
-  --success: 140 70% 45%;
-  --success-foreground: 220 30% 5%;
+  --success: 160 50% 40%;
+  --success-foreground: 220 60% 5%;
 
-  --input: 220 20% 15%;
-  --ring: 190 90% 50%;
+  --input: 220 40% 15%;
+  --ring: 45 100% 51%;
   
   --chart-1: 190 90% 50%;
   --chart-2: 280 80% 60%;

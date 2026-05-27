@@ -5,6 +5,6 @@ import fifaRouter from "./fifa";
 const router: IRouter = Router();
 
 router.use(healthRouter);
-router.use(fifaRouter);
+router.use("/fifa", fifaRouter);
 
 export default router;

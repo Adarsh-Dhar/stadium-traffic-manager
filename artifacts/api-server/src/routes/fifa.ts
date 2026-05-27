@@ -20,6 +20,7 @@ import {
   getSimulationStatus,
   getMcpStatus,
 } from "../lib/stadium-state.js";
+import apiFootball from "../lib/api-football.js";
 
 const router: IRouter = Router();
 
@@ -156,6 +157,91 @@ router.get("/simulation/status", async (_req, res): Promise<void> => {
 // GET /metrics/mcp-status
 router.get("/metrics/mcp-status", async (_req, res): Promise<void> => {
   res.json(getMcpStatus());
+});
+
+// FIFA World Cup 2026 Endpoints
+
+// GET /worldcup/matches - Get all World Cup matches
+router.get("/worldcup/matches", async (req, res): Promise<void> => {
+  try {
+    const status = req.query.status as string | undefined;
+    const data = await apiFootball.getWorldCupMatches(
+      status as 'live' | 'upcoming' | 'finished' | undefined
+    );
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch World Cup matches" });
+  }
+});
+
+// GET /worldcup/upcoming - Get upcoming World Cup matches
+router.get("/worldcup/upcoming", async (_req, res): Promise<void> => {
+  try {
+    const data = await apiFootball.getUpcomingMatches(10);
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch upcoming matches" });
+  }
+});
+
+// GET /worldcup/live - Get live World Cup matches
+router.get("/worldcup/live", async (_req, res): Promise<void> => {
+  try {
+    const data = await apiFootball.getLiveMatches();
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch live matches" });
+  }
+});
+
+// GET /worldcup/standings - Get World Cup standings/table
+router.get("/worldcup/standings", async (_req, res): Promise<void> => {
+  try {
+    const data = await apiFootball.getWorldCupStandings();
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch standings" });
+  }
+});
+
+// GET /worldcup/tournament - Get tournament information
+router.get("/worldcup/tournament", async (_req, res): Promise<void> => {
+  try {
+    const data = await apiFootball.getTournamentInfo();
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch tournament info" });
+  }
+});
+
+// GET /worldcup/team/:id - Get team information
+router.get("/worldcup/team/:id", async (req, res): Promise<void> => {
+  try {
+    const teamId = parseInt(req.params.id, 10);
+    if (isNaN(teamId)) {
+      res.status(400).json({ error: "Invalid team ID" });
+      return;
+    }
+    const data = await apiFootball.getTeamInfo(teamId);
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch team info" });
+  }
+});
+
+// GET /worldcup/match/:id/stats - Get match statistics
+router.get("/worldcup/match/:id/stats", async (req, res): Promise<void> => {
+  try {
+    const fixtureId = parseInt(req.params.id, 10);
+    if (isNaN(fixtureId)) {
+      res.status(400).json({ error: "Invalid fixture ID" });
+      return;
+    }
+    const data = await apiFootball.getMatchStats(fixtureId);
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch match stats" });
+  }
 });
 
 export default router;
