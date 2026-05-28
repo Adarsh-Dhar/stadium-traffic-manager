@@ -122,14 +122,67 @@ async function fetchRps() {
 // Kubernetes — patch deployment replica count
 // ---------------------------------------------------------------------------
 async function patchReplicas(targetReplicas) {
-  const patch = { spec: { replicas: targetReplicas } };
-  // Use strategic-merge-patch so only `spec.replicas` is touched
-  await appsV1.patchNamespacedDeployment({
+  // Prepare both JSON Patch and strategic merge formats. Some k8s servers
+  // accept JSON Patch (array) while others prefer strategic merge (object).
+  const jsonPatch = [{ op: 'replace', path: '/spec/replicas', value: targetReplicas }];
+  const strategicPatch = { spec: { replicas: targetReplicas } };
+
+  const headersJsonPatch = { 'Content-Type': 'application/json-patch+json' };
+  const headersStrategic = { 'Content-Type': 'application/strategic-merge-patch+json' };
+
+  // Support multiple @kubernetes/client-node signatures:
+  // - Older: patchNamespacedDeployment(name, namespace, body, ... , options)
+  // - Newer: patchNamespacedDeployment({ name, namespace, body, headers })
+  const fn = appsV1.patchNamespacedDeployment;
+  if (typeof fn !== 'function') throw new Error('AppsV1Api.patchNamespacedDeployment not available');
+
+  // Helper to call positional-style signature
+  const callPositional = async (body, headers) => fn.call(
+    appsV1,
+    CONFIG.deploymentName,
+    CONFIG.namespace,
+    body,
+    undefined, // pretty
+    undefined, // dryRun
+    undefined, // fieldManager
+    undefined, // fieldValidation
+    undefined, // force
+    { headers }
+  );
+
+  // Helper to call object-style signature
+  const callObject = async (body, headers) => fn.call(appsV1, {
     name: CONFIG.deploymentName,
     namespace: CONFIG.namespace,
-    body: patch,
-    headers: { 'Content-Type': 'application/strategic-merge-patch+json' },
+    body,
+    headers,
   });
+
+  try {
+    if (fn.length === 1) {
+      // Likely object-signature; try JSON Patch first
+      await callObject(jsonPatch, headersJsonPatch);
+    } else {
+      // Likely positional-signature; call with JSON Patch
+      await callPositional(jsonPatch, headersJsonPatch);
+    }
+  } catch (err) {
+    // If the server can't decode JSON Patch, fall back to strategic merge
+    const msg = String(err?.body ?? err?.message ?? err);
+    if (msg.includes('cannot unmarshal') || msg.includes('decode') || String(err?.statusCode) === '400') {
+      try {
+        if (fn.length === 1) {
+          await callObject(strategicPatch, headersStrategic);
+        } else {
+          await callPositional(strategicPatch, headersStrategic);
+        }
+      } catch (err2) {
+        throw err2;
+      }
+    } else {
+      throw err;
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
