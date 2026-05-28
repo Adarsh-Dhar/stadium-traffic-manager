@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: watchdog-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: watchdog
+  template:
+    metadata:
+      labels:
+        app: watchdog
+    spec:
+      containers:
+      # Container 1: Your Watchdog
+      - name: watchdog-container
+        image: watchdog:local
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: METRICS_API_URL
+          value: "http://localhost:5000"
+      
+      # Container 2: The Mock Server Sidecar (runs mock-server.js from ConfigMap)
+      - name: mock-server
+        image: node:20-slim
+        imagePullPolicy: IfNotPresent
+        command: ["node", "/app/mock-server.js"]
+        volumeMounts:
+        - name: mock-server-script
+          mountPath: /app/mock-server.js
+          subPath: mock-server.js
+        ports:
+        - containerPort: 5000
+          name: http
+
+      volumes:
+      - name: mock-server-script
+        configMap:
+          name: mock-server-script
