@@ -4,21 +4,115 @@ metadata:
   name: mock-server-script
 data:
   mock-server.js: |
-    const http = require('http');
+    'use strict';
 
-    // This function generates a random RPS between 5,000 and 12,000
-    // so you can watch your Watchdog scale up and down automatically.
-    const requestListener = function (req, res) {
-      const fakeRps = Math.floor(Math.random() * (12000 - 5000 + 1) + 5000);
-      
-      res.setHeader("Content-Type", "application/json");
-      res.writeHead(200);
-      res.end(JSON.stringify({ rps: fakeRps }));
-      
-      console.log(`Watchdog asked for metrics. Sent: ${fakeRps} RPS`);
+    /**
+     * Mock Stadium Metrics API
+     *
+     * Endpoints:
+     * - GET  /             => same as /metrics/rps, returns { rps }
+     * - GET  /metrics/rps  => returns { rps }
+     * - POST /scale-up     => { add?: number }
+     * - POST /scale-down   => { remove?: number }
+     * - GET  /status       => { simulatedContainers, lastAction }
+     */
+
+    const http = require('http');
+    const { URL } = require('url');
+
+    let simulatedContainers = 2;
+    let lastAction = 'initialized';
+
+    function generateRps() {
+      // Weighted bands with ranges
+      const bands = [
+        { min: 1000,  max: 3000,  weight: 30 },
+        { min: 3000,  max: 6000,  weight: 25 },
+        { min: 6000,  max: 9000,  weight: 20 },
+        { min: 9000,  max: 10000, weight: 10 },
+        { min: 10000, max: 15000, weight: 10 },
+        { min: 15000, max: 20000, weight: 5 },
+      ];
+
+      const total = bands.reduce((s, b) => s + b.weight, 0);
+      let pick = Math.floor(Math.random() * total);
+      for (const b of bands) {
+        if (pick < b.weight) {
+          return Math.floor(Math.random() * (b.max - b.min + 1) + b.min);
+        }
+        pick -= b.weight;
+      }
+      return bands[0].min;
+    }
+
+    function jsonResponse(res, statusCode, payload) {
+      const body = JSON.stringify(payload);
+      res.setHeader('Content-Type', 'application/json');
+      res.writeHead(statusCode);
+      res.end(body);
+    }
+
+    function readBody(req) {
+      return new Promise((resolve, reject) => {
+        let data = '';
+        req.on('data', (chunk) => data += chunk);
+        req.on('end', () => {
+          if (!data) return resolve({});
+          try { resolve(JSON.parse(data)); } catch (err) { reject(err); }
+        });
+        req.on('error', reject);
+      });
+    }
+
+    const requestListener = async function (req, res) {
+      try {
+        const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+        const path = url.pathname;
+        const method = req.method;
+
+        if (method === 'GET' && (path === '/' || path === '/metrics/rps')) {
+          const rps = generateRps();
+          lastAction = `generated ${rps} rps`;
+          console.log(`[mock] GET ${path} -> ${rps} RPS`);
+          return jsonResponse(res, 200, { rps });
+        }
+
+        if (method === 'POST' && path === '/scale-up') {
+          const body = await readBody(req);
+          const add = Number(body?.add ?? 1) || 1;
+          simulatedContainers += add;
+          lastAction = `scale-up +${add}`;
+          console.log(`[mock] POST /scale-up -> +${add} containers (now ${simulatedContainers})`);
+          return jsonResponse(res, 200, { action: 'scale-up', added: add, containers: simulatedContainers, message: 'scaled up' });
+        }
+
+        if (method === 'POST' && path === '/scale-down') {
+          const body = await readBody(req);
+          const remove = Number(body?.remove ?? 1) || 1;
+          const removed = Math.min(remove, simulatedContainers);
+          simulatedContainers = Math.max(0, simulatedContainers - removed);
+          lastAction = `scale-down -${removed}`;
+          console.log(`[mock] POST /scale-down -> -${removed} containers (now ${simulatedContainers})`);
+          return jsonResponse(res, 200, { action: 'scale-down', removed, containers: simulatedContainers, message: 'scaled down' });
+        }
+
+        if (method === 'GET' && path === '/status') {
+          return jsonResponse(res, 200, { simulatedContainers, lastAction });
+        }
+
+        return jsonResponse(res, 404, { error: 'not found', path });
+      } catch (err) {
+        console.error('[mock] request error', err);
+        return jsonResponse(res, 500, { error: err.message });
+      }
     };
 
     const server = http.createServer(requestListener);
     server.listen(5000, '0.0.0.0', () => {
-        console.log(`Mock Stadium API is running on port 5000`);
+      console.log('Mock Stadium API is running on port 5000');
+      console.log('Available routes:');
+      console.log('  GET  /, /metrics/rps');
+      console.log('  POST /scale-up');
+      console.log('  POST /scale-down');
+      console.log('  GET  /status');
     });

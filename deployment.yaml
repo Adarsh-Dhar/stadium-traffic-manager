@@ -19,9 +19,23 @@ spec:
         imagePullPolicy: IfNotPresent
         env:
         - name: METRICS_API_URL
-          value: "http://localhost:5000"
+          value: "http://localhost:5000/metrics/rps"
+        - name: RPS_PER_REPLICA
+          value: "1000"
+        - name: MIN_REPLICAS
+          value: "2"
+        - name: MAX_REPLICAS
+          value: "15"
+        - name: RPS_YELLOW_THRESHOLD
+          value: "8500"
+        - name: RPS_RED_THRESHOLD
+          value: "9500"
+        - name: COOLDOWN_SECONDS
+          value: "300"
+        - name: POLL_INTERVAL_MS
+          value: "5000"
       
-      # Container 2: The Mock Server Sidecar (runs mock-server.js from ConfigMap)
+      # Container 2: The Mock Server Sidecar
       - name: mock-server
         image: node:20-slim
         imagePullPolicy: IfNotPresent
