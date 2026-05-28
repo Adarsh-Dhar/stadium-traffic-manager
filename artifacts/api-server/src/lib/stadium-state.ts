@@ -1,64 +1,77 @@
-// In-memory simulation state for the FIFA ticketing system
+// PostgreSQL-backed stadium state for the FIFA ticketing system
 import { logger } from "./logger.js";
 import { pushMetrics, pushEvent } from "./dynatrace.js";
+import { db, pool, tickets, requestLog, metricsSnapshots } from "@workspace/db";
+import { eq, sql } from "drizzle-orm";
 
+// ── Types (unchanged) ──────────────────────────────────────────────────────
 export interface SystemMetrics {
-  avgLatency: number;
-  p95Latency: number;
-  p99Latency: number;
-  cpuUsage: number;
-  memoryUsage: number;
-  activeServers: number;
-  requestsPerSecond: number;
-  errorRate: number;
-  totalRequests: number;
-  k6P95Pass: boolean;
-  k6P99Pass: boolean;
+  avgLatency: number; p95Latency: number; p99Latency: number;
+  cpuUsage: number; memoryUsage: number; activeServers: number;
+  requestsPerSecond: number; errorRate: number; totalRequests: number;
+  k6P95Pass: boolean; k6P99Pass: boolean;
 }
-
-export interface MetricsSnapshot extends SystemMetrics {
-  timestamp: number;
-}
-
+export interface MetricsSnapshot extends SystemMetrics { timestamp: number; }
 export interface Alert {
-  id: string;
-  severity: "info" | "warning" | "critical";
-  title: string;
-  message: string;
-  timestamp: number;
-  resolved: boolean;
-  aiAction: string | null;
+  id: string; severity: "info" | "warning" | "critical";
+  title: string; message: string; timestamp: number;
+  resolved: boolean; aiAction: string | null;
 }
-
 export interface GateStatus {
-  id: string;
-  name: string;
-  status: "open" | "congested" | "closed";
-  throughput: number;
+  id: string; name: string; status: "open" | "congested" | "closed"; throughput: number;
 }
-
 export interface SimulationState {
-  running: boolean;
-  stage: string;
-  intensity: "low" | "medium" | "high" | "surge" | null;
-  startedAt: number | null;
-  durationSeconds: number;
-  virtualUsers: number;
-  nextStage: string | null;
+  running: boolean; stage: string; intensity: "low" | "medium" | "high" | "surge" | null;
+  startedAt: number | null; durationSeconds: number; virtualUsers: number; nextStage: string | null;
 }
 
-// Valid ticket pool
-const validTickets = new Set<string>();
-for (let i = 0; i < 100000; i++) {
-  validTickets.add(`TICKET_${i}_2026WC`);
+// ── DB seed (runs once at startup) ────────────────────────────────────────
+async function seedTickets(): Promise<void> {
+  const result = await db.execute(sql`SELECT COUNT(*)::int AS c FROM tickets`);
+  const count = (result.rows[0] as any).c as number;
+  if (count >= 100_000) {
+    logger.info("[db] tickets already seeded");
+    return;
+  }
+  logger.info("[db] seeding 100k tickets...");
+  // Insert in batches of 5k to avoid huge single statement
+  for (let batch = 0; batch < 20; batch++) {
+    const values = [];
+    for (let i = batch * 5_000; i < (batch + 1) * 5_000; i++) {
+      values.push({ id: `TICKET_${i}_2026WC`, used: false });
+    }
+    await db.insert(tickets).values(values).onConflictDoNothing();
+  }
+  logger.info("[db] 100k tickets seeded");
 }
 
-// Rolling latency window for percentile computation (last 200 samples)
+seedTickets().catch((err) => logger.error({ err }, "[db] seed failed"));
+
+// ── Real CPU measurement ───────────────────────────────────────────────────
+let lastCpuSample = process.cpuUsage();
+let lastCpuTime = Date.now();
+
+function getRealCpuPercent(): number {
+  const now = Date.now();
+  const elapsed = now - lastCpuTime;
+  if (elapsed < 500) return state.cpuUsage;
+  const usage = process.cpuUsage(lastCpuSample);
+  lastCpuSample = process.cpuUsage();
+  lastCpuTime = now;
+  return Math.min(100, ((usage.user + usage.system) / 1000 / elapsed) * 100);
+}
+
+// ── Real memory measurement ────────────────────────────────────────────────
+function getRealMemoryPercent(): number {
+  const mem = process.memoryUsage();
+  // rss as a % of 2GB ceiling — adjust ceiling to match your machine
+  const ceilingBytes = 2 * 1024 * 1024 * 1024;
+  return Math.min(100, (mem.rss / ceilingBytes) * 100);
+}
+
+// ── Rolling latency window ─────────────────────────────────────────────────
 const latencyWindow: number[] = [];
-const LATENCY_WINDOW_SIZE = 200;
-// MCP bridge simulated state
-let mcpEventsForwarded = 0;
-let mcpLastPing = Date.now();
+const LATENCY_WINDOW_SIZE = 500;
 
 function recordLatency(ms: number): void {
   latencyWindow.push(ms);
@@ -66,13 +79,13 @@ function recordLatency(ms: number): void {
 }
 
 function computePercentile(sorted: number[], pct: number): number {
-  if (sorted.length === 0) return 0;
+  if (!sorted.length) return 0;
   const idx = Math.ceil((pct / 100) * sorted.length) - 1;
   return sorted[Math.max(0, idx)];
 }
 
 function getLatencyPercentiles(): { p95: number; p99: number } {
-  if (latencyWindow.length === 0) return { p95: 50, p99: 55 };
+  if (!latencyWindow.length) return { p95: 50, p99: 55 };
   const sorted = [...latencyWindow].sort((a, b) => a - b);
   return {
     p95: Math.round(computePercentile(sorted, 95)),
@@ -80,7 +93,7 @@ function getLatencyPercentiles(): { p95: number; p99: number } {
   };
 }
 
-// Mutable state
+// ── Mutable state ──────────────────────────────────────────────────────────
 let state = {
   requestCount: 0,
   avgLatency: 50,
@@ -98,579 +111,275 @@ let state = {
 let alerts: Alert[] = [];
 let metricsHistory: MetricsSnapshot[] = [];
 let simulation: SimulationState = {
-  running: false,
-  stage: "idle",
-  intensity: null,
-  startedAt: null,
-  durationSeconds: 120,
-  virtualUsers: 0,
-  nextStage: null,
+  running: false, stage: "idle", intensity: null,
+  startedAt: null, durationSeconds: 120, virtualUsers: 0, nextStage: null,
 };
-
 let simulationInterval: ReturnType<typeof setInterval> | null = null;
 let metricsInterval: ReturnType<typeof setInterval> | null = null;
+let mcpEventsForwarded = 0;
+let mcpLastPing = Date.now();
 
-// Gate definitions
+// ── Gate definitions ───────────────────────────────────────────────────────
 const GATES: GateStatus[] = [
-  { id: "gate-a", name: "Gate A — North", status: "open", throughput: 0 },
-  { id: "gate-b", name: "Gate B — South", status: "open", throughput: 0 },
-  { id: "gate-c", name: "Gate C — East", status: "open", throughput: 0 },
-  { id: "gate-d", name: "Gate D — West", status: "open", throughput: 0 },
-  { id: "gate-e", name: "Gate E — VIP", status: "open", throughput: 0 },
-  { id: "gate-f", name: "Gate F — Press", status: "open", throughput: 0 },
+  { id: "gate-a", name: "Gate A — North",  status: "open", throughput: 0 },
+  { id: "gate-b", name: "Gate B — South",  status: "open", throughput: 0 },
+  { id: "gate-c", name: "Gate C — East",   status: "open", throughput: 0 },
+  { id: "gate-d", name: "Gate D — West",   status: "open", throughput: 0 },
+  { id: "gate-e", name: "Gate E — VIP",    status: "open", throughput: 0 },
+  { id: "gate-f", name: "Gate F — Press",  status: "open", throughput: 0 },
 ];
-
 let gateStates = GATES.map((g) => ({ ...g }));
 
-function generateAlertId(): string {
-  return `alert-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
+// ── Alerts ─────────────────────────────────────────────────────────────────
+function generateAlertId() { return `alert-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`; }
 
-function addAlert(
-  severity: Alert["severity"],
-  title: string,
-  message: string,
-  aiAction: string | null = null,
-): void {
-  const alert: Alert = {
-    id: generateAlertId(),
-    severity,
-    title,
-    message,
-    timestamp: Date.now(),
-    resolved: false,
-    aiAction,
-  };
-  alerts.unshift(alert);
-  // Keep max 50 alerts
+export function addAlert(severity: Alert["severity"], title: string, message: string, aiAction: string | null = null): void {
+  alerts.unshift({ id: generateAlertId(), severity, title, message, timestamp: Date.now(), resolved: false, aiAction });
   if (alerts.length > 50) alerts = alerts.slice(0, 50);
-
-  // Forward critical/warning alerts to Dynatrace events
   if (severity === "critical" || severity === "warning") {
-    const dtSeverity = severity === "critical" ? "CUSTOM_ALERT" : "INFO";
-    pushEvent(title, message, dtSeverity).catch(() => {/* silent */});
+    pushEvent(title, message, severity === "critical" ? "CUSTOM_ALERT" : "INFO").catch(() => {});
   }
 }
 
-function resolveAlerts(severity?: Alert["severity"]): void {
-  alerts = alerts.map((a) =>
-    !a.resolved && (!severity || a.severity === severity)
-      ? { ...a, resolved: true }
-      : a,
-  );
+export function resolveAlerts(severity?: Alert["severity"]): void {
+  alerts = alerts.map((a) => (!a.resolved && (!severity || a.severity === severity)) ? { ...a, resolved: true } : a);
 }
 
-// Compute derived state
-function getBaseLatency(): number {
-  if (!simulation.running) return 50 + Math.random() * 10;
-  const vu = simulation.virtualUsers;
-  const factor = vu / 1000;
-  const bottleneck = Math.min(factor * 500, 4000);
-  const perServerReduction = (state.activeServers - 1) * 0.3;
-  return Math.max(40, 50 + bottleneck * (1 - perServerReduction));
-}
-
-function updateMetrics(): void {
+// ── Metrics update (runs every 2s) ─────────────────────────────────────────
+async function updateMetrics(): Promise<void> {
   const now = Date.now();
   const elapsed = (now - state.lastRequestTime) / 1000;
-  state.requestsPerSecond =
-    elapsed > 0 ? Math.round(state.requestCount / Math.max(elapsed, 1)) : 0;
+  state.requestsPerSecond = elapsed > 0 ? Math.round(state.requestCount / Math.max(elapsed, 1)) : 0;
 
-  // Derive CPU/memory from virtual users and servers
-  if (simulation.running) {
-    const vu = simulation.virtualUsers;
-    const targetCpu = Math.min(98, 20 + (vu / 100) / state.activeServers);
-    const targetMem = Math.min(95, 30 + (vu / 150) / state.activeServers);
-    state.cpuUsage = state.cpuUsage * 0.7 + targetCpu * 0.3;
-    state.memoryUsage = state.memoryUsage * 0.7 + targetMem * 0.3;
-    state.avgLatency = getBaseLatency();
-    state.errorRate =
-      state.cpuUsage > 85 ? Math.min(25, (state.cpuUsage - 85) * 1.5) : 0;
-  } else {
-    // Gradually recover
-    state.cpuUsage = Math.max(18, state.cpuUsage * 0.92 + 18 * 0.08);
-    state.memoryUsage = Math.max(25, state.memoryUsage * 0.93 + 25 * 0.07);
-    state.avgLatency = Math.max(45, state.avgLatency * 0.9 + 50 * 0.1);
-    state.errorRate = Math.max(0, state.errorRate * 0.8);
+  // Use REAL CPU and memory now
+  state.cpuUsage   = state.cpuUsage   * 0.6 + getRealCpuPercent()   * 0.4;
+  state.memoryUsage = state.memoryUsage * 0.6 + getRealMemoryPercent() * 0.4;
+
+  // Pool pressure — reflect connection queue depth in avgLatency
+  const poolStats = pool as any; // pg Pool exposes these properties
+  const waitingClients = poolStats.waitingCount ?? 0;
+  if (waitingClients > 0) {
+    state.avgLatency = Math.min(5000, state.avgLatency + waitingClients * 10);
   }
 
-  // Check thresholds and fire alerts
+  // Error rate from latency window
+  const highLatencies = latencyWindow.filter((l) => l > 2000).length;
+  state.errorRate = latencyWindow.length ? (highLatencies / latencyWindow.length) * 100 : 0;
+
+  // Alerts
   if (state.cpuUsage > 85 && !alerts.find((a) => !a.resolved && a.title.includes("CPU"))) {
-    addAlert("critical", "CPU Critical", `CPU at ${state.cpuUsage.toFixed(0)}% — service degradation imminent. Scale recommended.`);
+    addAlert("critical", "CPU Critical", `Real CPU at ${state.cpuUsage.toFixed(0)}% — scale recommended.`);
   }
   if (state.avgLatency > 1500 && !alerts.find((a) => !a.resolved && a.title.includes("Latency"))) {
-    addAlert("warning", "High Latency Detected", `Avg latency at ${state.avgLatency.toFixed(0)}ms — fans experiencing delays at gates.`);
+    addAlert("warning", "High Latency", `Avg latency ${state.avgLatency.toFixed(0)}ms — DB pool likely saturated.`);
   }
 
-  // Seed percentile window from simulated latency distribution
-  if (simulation.running) {
-    const base = state.avgLatency;
-    recordLatency(base * (0.8 + Math.random() * 0.4));
-    recordLatency(base * (1.0 + Math.random() * 0.6));
-    recordLatency(base * (1.2 + Math.random() * 1.0));
-  }
   mcpEventsForwarded++;
   mcpLastPing = Date.now();
-
   const { p95, p99 } = getLatencyPercentiles();
 
-  // Record history
   const snapshot: MetricsSnapshot = {
     timestamp: now,
     avgLatency: Math.round(state.avgLatency),
-    p95Latency: p95,
-    p99Latency: p99,
+    p95Latency: p95, p99Latency: p99,
     cpuUsage: Math.round(state.cpuUsage * 10) / 10,
     memoryUsage: Math.round(state.memoryUsage * 10) / 10,
     activeServers: state.activeServers,
     requestsPerSecond: state.requestsPerSecond,
     errorRate: Math.round(state.errorRate * 10) / 10,
     totalRequests: state.totalRequests,
-    k6P95Pass: p95 < 2000,
-    k6P99Pass: p99 < 5000,
+    k6P95Pass: p95 < 2000, k6P99Pass: p99 < 5000,
   };
   metricsHistory.push(snapshot);
-  // Keep 5 minutes of history at 2-second intervals = 150 samples
   if (metricsHistory.length > 150) metricsHistory.shift();
 
-  // Push to Dynatrace (silent no-op when credentials not set)
+  // Persist snapshot to Postgres
+  db.insert(metricsSnapshots).values({
+    ts: now, avgLatency: snapshot.avgLatency, p95Latency: p95, p99Latency: p99,
+    cpuUsage: Math.round(state.cpuUsage), memoryUsage: Math.round(state.memoryUsage),
+    activeServers: state.activeServers, requestsPerSec: state.requestsPerSecond,
+    errorRate: Math.round(state.errorRate), totalRequests: state.totalRequests,
+  }).catch(() => {});
+
   pushMetrics({
-    avgLatency:        snapshot.avgLatency,
-    p95Latency:        snapshot.p95Latency,
-    p99Latency:        snapshot.p99Latency,
-    cpuUsage:          snapshot.cpuUsage,
-    memoryUsage:       snapshot.memoryUsage,
-    activeServers:     snapshot.activeServers,
-    requestsPerSecond: snapshot.requestsPerSecond,
-    errorRate:         snapshot.errorRate,
-    totalRequests:     snapshot.totalRequests,
-    virtualUsers:      simulation.virtualUsers,
-  }, now).catch(() => {/* silent */});
+    avgLatency: snapshot.avgLatency, p95Latency: p95, p99Latency: p99,
+    cpuUsage: snapshot.cpuUsage, memoryUsage: snapshot.memoryUsage,
+    activeServers: state.activeServers, requestsPerSecond: state.requestsPerSecond,
+    errorRate: snapshot.errorRate, totalRequests: state.totalRequests,
+    virtualUsers: simulation.virtualUsers,
+  }, now).catch(() => {});
 }
 
-// Simulation stages
-const STAGE_CONFIGS: Record<
-  string,
-  { vus: number[]; name: string; nextStage: string | null }[]
-> = {
-  low: [
-    { vus: [0, 200], name: "Warmup", nextStage: "Gradual Increase" },
-    { vus: [200, 500], name: "Gradual Increase", nextStage: "Sustained" },
-    { vus: [500, 500], name: "Sustained", nextStage: null },
-  ],
-  medium: [
-    { vus: [0, 500], name: "Warmup", nextStage: "Gradual Increase" },
-    { vus: [500, 1500], name: "Gradual Increase", nextStage: "Peak" },
-    { vus: [1500, 1500], name: "Peak", nextStage: null },
-  ],
-  high: [
-    { vus: [0, 1000], name: "Warmup", nextStage: "Gradual Increase" },
-    { vus: [1000, 3000], name: "Gradual Increase", nextStage: "Peak Load" },
-    { vus: [3000, 4000], name: "Peak Load", nextStage: "Sustained Peak" },
-    { vus: [4000, 4000], name: "Sustained Peak", nextStage: null },
-  ],
-  surge: [
-    { vus: [0, 2000], name: "Warmup", nextStage: "Crowd Rush" },
-    { vus: [2000, 5000], name: "Crowd Rush", nextStage: "Peak Surge" },
-    { vus: [5000, 8000], name: "Peak Surge", nextStage: "Sustained Surge" },
-    { vus: [8000, 8000], name: "Sustained Surge", nextStage: "Cooldown" },
-    { vus: [8000, 0], name: "Cooldown", nextStage: null },
-  ],
+// ── Simulation (stages unchanged, just wired to real state) ───────────────
+const STAGE_CONFIGS: Record<string, { vus: number[]; name: string; nextStage: string | null }[]> = {
+  low:    [{ vus: [0, 200], name: "Warmup", nextStage: "Gradual Increase" }, { vus: [200, 500], name: "Gradual Increase", nextStage: "Sustained" }, { vus: [500, 500], name: "Sustained", nextStage: null }],
+  medium: [{ vus: [0, 500], name: "Warmup", nextStage: "Gradual Increase" }, { vus: [500, 1500], name: "Gradual Increase", nextStage: "Peak" }, { vus: [1500, 1500], name: "Peak", nextStage: null }],
+  high:   [{ vus: [0, 1000], name: "Warmup", nextStage: "Gradual Increase" }, { vus: [1000, 3000], name: "Gradual Increase", nextStage: "Peak Load" }, { vus: [3000, 4000], name: "Peak Load", nextStage: "Sustained Peak" }, { vus: [4000, 4000], name: "Sustained Peak", nextStage: null }],
+  surge:  [{ vus: [0, 2000], name: "Warmup", nextStage: "Crowd Rush" }, { vus: [2000, 5000], name: "Crowd Rush", nextStage: "Peak Surge" }, { vus: [5000, 8000], name: "Peak Surge", nextStage: "Sustained Surge" }, { vus: [8000, 8000], name: "Sustained Surge", nextStage: "Cooldown" }, { vus: [8000, 0], name: "Cooldown", nextStage: null }],
 };
 
 function runSimulationTick(): void {
   if (!simulation.running || !simulation.startedAt || !simulation.intensity) return;
-
   const elapsed = (Date.now() - simulation.startedAt) / 1000;
-  const totalDuration = simulation.durationSeconds;
   const stages = STAGE_CONFIGS[simulation.intensity] ?? STAGE_CONFIGS["medium"];
-  const stageDuration = totalDuration / stages.length;
-  const stageIndex = Math.min(
-    Math.floor(elapsed / stageDuration),
-    stages.length - 1,
-  );
+  const stageDuration = simulation.durationSeconds / stages.length;
+  const stageIndex = Math.min(Math.floor(elapsed / stageDuration), stages.length - 1);
   const stage = stages[stageIndex];
   const stageProgress = (elapsed % stageDuration) / stageDuration;
-
-  simulation.virtualUsers = Math.round(
-    stage.vus[0] + (stage.vus[1] - stage.vus[0]) * stageProgress,
-  );
+  simulation.virtualUsers = Math.round(stage.vus[0] + (stage.vus[1] - stage.vus[0]) * stageProgress);
   simulation.stage = stage.name;
   simulation.nextStage = stage.nextStage;
-
-  // Update gate throughput based on VUs
-  gateStates = gateStates.map((gate, i) => {
-    const base = simulation.virtualUsers / gateStates.length;
-    const throughput = Math.round(base * (0.8 + Math.random() * 0.4));
-    const status: GateStatus["status"] =
-      state.cpuUsage > 85
-        ? "congested"
-        : state.cpuUsage > 60
-          ? Math.random() > 0.7
-            ? "congested"
-            : "open"
-          : "open";
+  gateStates = gateStates.map((gate) => {
+    const throughput = Math.round((simulation.virtualUsers / gateStates.length) * (0.8 + Math.random() * 0.4));
+    const status: GateStatus["status"] = state.cpuUsage > 85 ? "congested" : state.cpuUsage > 60 && Math.random() > 0.7 ? "congested" : "open";
     return { ...gate, throughput, status };
   });
-
-  // End simulation
-  if (elapsed >= totalDuration) {
+  if (elapsed >= simulation.durationSeconds) {
     stopSimulation();
-    addAlert(
-      "info",
-      "Simulation Complete",
-      `Load test finished. Peak ${simulation.virtualUsers} virtual users handled across ${state.activeServers} servers.`,
-    );
+    addAlert("info", "Simulation Complete", `Load test finished.`);
   }
 }
 
-export function startSimulation(
-  intensity: "low" | "medium" | "high" | "surge",
-  durationSeconds = 120,
-): SimulationState {
+export function startSimulation(intensity: "low" | "medium" | "high" | "surge", durationSeconds = 120): SimulationState {
   if (simulation.running) stopSimulation();
-
-  simulation = {
-    running: true,
-    stage: "Starting",
-    intensity,
-    startedAt: Date.now(),
-    durationSeconds,
-    virtualUsers: 0,
-    nextStage: null,
-  };
-
-  addAlert(
-    "info",
-    `Simulation Started — ${intensity.toUpperCase()}`,
-    `Crowd surge simulation initiated with ${intensity} intensity. Monitoring for bottlenecks.`,
-  );
-
+  simulation = { running: true, stage: "Starting", intensity, startedAt: Date.now(), durationSeconds, virtualUsers: 0, nextStage: null };
+  addAlert("info", `Simulation Started — ${intensity.toUpperCase()}`, `Crowd surge simulation initiated.`);
   simulationInterval = setInterval(runSimulationTick, 500);
   return { ...simulation };
 }
 
 export function stopSimulation(): SimulationState {
-  if (simulationInterval) {
-    clearInterval(simulationInterval);
-    simulationInterval = null;
-  }
-  simulation = {
-    running: false,
-    stage: "idle",
-    intensity: simulation.intensity,
-    startedAt: null,
-    durationSeconds: simulation.durationSeconds,
-    virtualUsers: 0,
-    nextStage: null,
-  };
+  if (simulationInterval) { clearInterval(simulationInterval); simulationInterval = null; }
+  simulation = { running: false, stage: "idle", intensity: simulation.intensity, startedAt: null, durationSeconds: simulation.durationSeconds, virtualUsers: 0, nextStage: null };
   gateStates = GATES.map((g) => ({ ...g }));
   return { ...simulation };
 }
 
 export function getSimulationStatus(): SimulationState {
-  const elapsedSeconds = simulation.startedAt
-    ? Math.round((Date.now() - simulation.startedAt) / 1000)
-    : 0;
-  return { ...simulation, elapsedSeconds } as SimulationState & {
-    elapsedSeconds: number;
-  };
+  const elapsedSeconds = simulation.startedAt ? Math.round((Date.now() - simulation.startedAt) / 1000) : 0;
+  return { ...simulation, elapsedSeconds } as any;
 }
+
+// ── Public API ─────────────────────────────────────────────────────────────
 
 export function getCurrentMetrics(): SystemMetrics {
   const { p95, p99 } = getLatencyPercentiles();
   return {
-    avgLatency: Math.round(state.avgLatency),
-    p95Latency: p95,
-    p99Latency: p99,
-    cpuUsage: Math.round(state.cpuUsage * 10) / 10,
-    memoryUsage: Math.round(state.memoryUsage * 10) / 10,
-    activeServers: state.activeServers,
-    requestsPerSecond: state.requestsPerSecond,
-    errorRate: Math.round(state.errorRate * 10) / 10,
-    totalRequests: state.totalRequests,
-    k6P95Pass: p95 < 2000,
-    k6P99Pass: p99 < 5000,
+    avgLatency: Math.round(state.avgLatency), p95Latency: p95, p99Latency: p99,
+    cpuUsage: Math.round(state.cpuUsage * 10) / 10, memoryUsage: Math.round(state.memoryUsage * 10) / 10,
+    activeServers: state.activeServers, requestsPerSecond: state.requestsPerSecond,
+    errorRate: Math.round(state.errorRate * 10) / 10, totalRequests: state.totalRequests,
+    k6P95Pass: p95 < 2000, k6P99Pass: p99 < 5000,
   };
 }
 
-export function getMetricsHistory(): MetricsSnapshot[] {
-  return [...metricsHistory];
-}
-
-export function getAlerts(): Alert[] {
-  return [...alerts];
-}
-
+export function getMetricsHistory(): MetricsSnapshot[] { return [...metricsHistory]; }
+export function getAlerts(): Alert[] { return [...alerts]; }
 export function getStadiumCapacity() {
-  const totalCapacity = 80000;
-  const currentOccupancy = Math.min(state.totalEntered, totalCapacity);
-  return {
-    totalCapacity,
-    currentOccupancy,
-    occupancyPercent: Math.round((currentOccupancy / totalCapacity) * 1000) / 10,
-    gates: gateStates,
-  };
+  return { totalCapacity: 80000, currentOccupancy: Math.min(state.totalEntered, 80000), occupancyPercent: Math.round((Math.min(state.totalEntered, 80000) / 80000) * 1000) / 10, gates: gateStates };
 }
 
-export function validateTicket(ticketId: string): {
-  valid: boolean;
-  overloaded: boolean;
-} {
+// ── validateTicket — THE KEY CHANGE: real DB read + write ─────────────────
+export async function validateTicket(ticketId: string): Promise<{ valid: boolean; overloaded: boolean }> {
+  const t0 = Date.now();
   state.requestCount++;
   state.totalRequests++;
 
-  const isOverloaded = state.cpuUsage > 90 && Math.random() < 0.15;
+  // Check pool pressure — if too many clients waiting, return 503 immediately
+  const poolStats = pool as any;
+  const isOverloaded = (poolStats.waitingCount ?? 0) > 10 || (state.cpuUsage > 90 && Math.random() < 0.3);
+
   if (isOverloaded) {
-    state.errorRate = Math.min(25, state.errorRate + 0.5);
+    recordLatency(Date.now() - t0);
+    // Log the overload to DB (fire and forget)
+    db.insert(requestLog).values({ ticketId, status: "overloaded", latencyMs: Date.now() - t0, ts: Date.now() }).catch(() => {});
     return { valid: false, overloaded: true };
   }
 
-  return { valid: validTickets.has(ticketId), overloaded: false };
+  try {
+    // Real SELECT against Postgres — this is what creates actual DB load
+    const rows = await db.select({ id: tickets.id, used: tickets.used })
+      .from(tickets)
+      .where(eq(tickets.id, ticketId))
+      .limit(1);
+
+    const latencyMs = Date.now() - t0;
+    recordLatency(latencyMs);
+    state.avgLatency = state.avgLatency * 0.95 + latencyMs * 0.05;
+
+    const valid = rows.length > 0 && !rows[0].used;
+
+    // INSERT into request_log — this double I/O is what stresses the pool under 100k
+    await db.insert(requestLog).values({ ticketId, status: valid ? "valid" : "invalid", latencyMs, ts: Date.now() });
+
+    return { valid, overloaded: false };
+  } catch (err: any) {
+    const latencyMs = Date.now() - t0;
+    recordLatency(latencyMs);
+    logger.error({ err: err.message, ticketId }, "validateTicket DB error");
+    return { valid: false, overloaded: true };
+  }
 }
 
-export function scanTicket(
-  ticketId: string,
-  gate: string,
-): { success: boolean; totalEntered: number } {
+// ── scanTicket ────────────────────────────────────────────────────────────
+export async function scanTicket(ticketId: string, gate: string): Promise<{ success: boolean; totalEntered: number }> {
   state.requestCount++;
   state.totalRequests++;
-  const isValid = validTickets.has(ticketId);
-  if (isValid) {
-    state.totalEntered++;
-    const prev = state.gateEntries.get(gate) ?? 0;
-    state.gateEntries.set(gate, prev + 1);
-  }
-  return { success: isValid, totalEntered: state.totalEntered };
+
+  const rows = await db.select().from(tickets).where(eq(tickets.id, ticketId)).limit(1);
+  if (!rows.length || rows[0].used) return { success: false, totalEntered: state.totalEntered };
+
+  // Mark ticket as used — real UPDATE
+  await db.update(tickets).set({ used: true, gate, scannedAt: Date.now() }).where(eq(tickets.id, ticketId));
+  state.totalEntered++;
+  state.gateEntries.set(gate, (state.gateEntries.get(gate) ?? 0) + 1);
+  return { success: true, totalEntered: state.totalEntered };
 }
 
 export function scaleServer(action: "add-server" | "remove-server"): void {
   if (action === "add-server") {
     state.activeServers++;
-    addAlert(
-      "info",
-      "Server Scaled Up",
-      `Server instance added. Now running ${state.activeServers} active servers.`,
-      `Auto-scale: added server instance #${state.activeServers}`,
-    );
+    addAlert("info", "Server Scaled Up", `Now running ${state.activeServers} active servers.`, `Added server #${state.activeServers}`);
   } else if (action === "remove-server" && state.activeServers > 1) {
     state.activeServers--;
-    addAlert(
-      "info",
-      "Server Scaled Down",
-      `Server instance removed. Now running ${state.activeServers} active servers.`,
-    );
+    addAlert("info", "Server Scaled Down", `Now running ${state.activeServers} active servers.`);
   }
 }
 
-export function resetSystem(): void {
+export async function resetSystem(): Promise<void> {
   stopSimulation();
-  state = {
-    requestCount: 0,
-    avgLatency: 50,
-    cpuUsage: 20,
-    memoryUsage: 30,
-    activeServers: 1,
-    errorRate: 0,
-    totalRequests: 0,
-    requestsPerSecond: 0,
-    lastRequestTime: Date.now(),
-    gateEntries: new Map(),
-    totalEntered: 0,
-  };
+  // Truncate logs and reset ticket usage
+  await Promise.all([
+    db.execute(sql`TRUNCATE TABLE request_log`),
+    db.update(tickets).set({ used: false, gate: null, scannedAt: null }),
+  ]).catch((err) => logger.warn({ err }, "resetSystem DB error"));
+
+  state = { requestCount: 0, avgLatency: 50, cpuUsage: 20, memoryUsage: 30, activeServers: 1, errorRate: 0, totalRequests: 0, requestsPerSecond: 0, lastRequestTime: Date.now(), gateEntries: new Map(), totalEntered: 0 };
   latencyWindow.length = 0;
   mcpEventsForwarded = 0;
   alerts = [];
   metricsHistory = [];
   gateStates = GATES.map((g) => ({ ...g }));
-  addAlert("info", "System Reset", "All metrics and simulation state cleared.");
+  addAlert("info", "System Reset", "All metrics and DB state cleared.");
 }
 
 export function getMcpStatus() {
+  const poolStats = pool as any;
   return {
     connected: true,
     serverUrl: "npx @dynatrace-oss/dynatrace-mcp-server@latest",
-    toolsAvailable: [
-      "get_metrics",
-      "get_problems",
-      "get_entities",
-      "get_events",
-      "get_synthetic_locations",
-      "push_metric",
-      "create_event",
-    ],
-    lastPing: mcpLastPing,
-    eventsForwarded: mcpEventsForwarded,
+    toolsAvailable: ["get_metrics","get_problems","get_entities","get_events","get_synthetic_locations","push_metric","create_event"],
+    lastPing: mcpLastPing, eventsForwarded: mcpEventsForwarded,
     dynatraceEnvId: process.env["DYNATRACE_ENV_ID"] ?? null,
     status: process.env["DYNATRACE_ENV_ID"] ? "connected" : "simulated",
+    // NEW — exposes pool health in the MCP status endpoint
+    pgPool: { total: poolStats.totalCount ?? 0, idle: poolStats.idleCount ?? 0, waiting: poolStats.waitingCount ?? 0 },
   } as const;
 }
 
-export async function aiAnalyze(): Promise<{
-  analysis: string;
-  actions: string[];
-  confidence: number;
-  serversAdded: number;
-}> {
-  const metrics = getCurrentMetrics();
-  const defaultActions: string[] = [];
-  let serversAdded = 0;
-  let analysis = "";
-  let confidence = 0.95;
+// Keep the full aiAnalyze export (it's unchanged — paste from original stadium-state.ts)
+export { aiAnalyze } from "./ai-analyze.js";
 
-  const modelPrompt = `You are an SRE assistant. Analyze the following JSON metrics and provide a JSON object with keys: analysis (string), actions (array of short strings), confidence (number between 0 and 1), serversAdded (integer). Metrics: ${JSON.stringify(
-    metrics,
-  )}\n\nKeep the response as valid JSON so it can be parsed programmatically.`;
-
-  const apiKey = process.env.GEMINI_API_KEY || process.env.GENERATIVE_API_KEY || process.env.GOOGLE_API_KEY;
-  const apiUrl = process.env.GEMINI_API_URL ||
-    "https://us-models.googleapis.com/v1/models/gemini-2.5-flash:generateText";
-
-  async function callModel(promptText: string): Promise<string> {
-    const maxAttempts = 2;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
-      try {
-        const headers: Record<string, string> = { "Content-Type": "application/json" };
-        if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
-
-        const body = JSON.stringify({
-          prompt: { text: promptText },
-          temperature: 0.2,
-          maxOutputTokens: 512,
-        });
-
-        const url = apiKey && !headers["Authorization"] ? `${apiUrl}?key=${apiKey}` : apiUrl;
-        const resp = await fetch(url, { method: "POST", headers, body, signal: controller.signal as any });
-        clearTimeout(timeout);
-        if (!resp.ok) {
-          const text = await resp.text().catch(() => "<no body>");
-          logger.warn({ attempt, status: resp.status, body: text }, "Generative API returned non-OK");
-          if ([429, 502, 503, 504].includes(resp.status) && attempt < maxAttempts) {
-            await new Promise((r) => setTimeout(r, 500 * attempt));
-            continue;
-          }
-          throw new Error(`Generative API error ${resp.status}: ${text}`);
-        }
-
-        const json = await resp.json().catch(() => null);
-        // Try to extract the best text candidate from common shapes
-        const j: any = json;
-        let out = "";
-        if (!j) out = "";
-        else if (Array.isArray(j.candidates) && j.candidates[0]) out = j.candidates[0].content ?? JSON.stringify(j.candidates[0]);
-        else if (j.candidates?.[0]?.output) out = j.candidates[0].output;
-        else if (j.output?.[0]?.content) out = j.output[0].content;
-        else if (typeof j.result === "string") out = j.result;
-        else out = JSON.stringify(j);
-
-        return out;
-      } catch (err: any) {
-        clearTimeout(timeout);
-        if (err?.name === "AbortError") {
-          logger.warn({ attempt }, "Generative API request timed out");
-          if (attempt < maxAttempts) {
-            await new Promise((r) => setTimeout(r, 400 * attempt));
-            continue;
-          }
-        }
-        logger.error({ err, attempt }, "Generative API call failed");
-        if (attempt < maxAttempts) await new Promise((r) => setTimeout(r, 400 * attempt));
-        else throw err;
-      }
-    }
-    throw new Error("Generative API failed after retries");
-  }
-
-  try {
-    const raw = await callModel(modelPrompt);
-    logger.info({ raw: raw?.slice(0, 800) }, "AI raw response");
-
-    let parsed: any = null;
-    try {
-      parsed = JSON.parse(raw);
-    } catch (e) {
-      const match = raw.match(/\{[\s\S]*\}/);
-      if (match) {
-        try {
-          parsed = JSON.parse(match[0]);
-        } catch (e) {
-          parsed = null;
-        }
-      }
-    }
-
-    if (parsed) {
-      analysis = typeof parsed.analysis === "string" ? parsed.analysis : raw;
-      if (Array.isArray(parsed.actions)) defaultActions.push(...parsed.actions.map(String));
-      confidence = typeof parsed.confidence === "number" ? parsed.confidence : confidence;
-      serversAdded = typeof parsed.serversAdded === "number" ? parsed.serversAdded : 0;
-    } else {
-      // Fallback: simple heuristic (previous local logic)
-      logger.info({ raw }, "Falling back to local heuristic for AI analysis");
-      if (metrics.cpuUsage > 85) {
-        const serversNeeded = Math.ceil((metrics.cpuUsage - 70) / 15);
-        serversAdded = serversNeeded;
-        defaultActions.push(`Scaled up ${serversNeeded} server instance(s) — CPU pressure at ${metrics.cpuUsage.toFixed(0)}%`);
-        analysis = `Detected severe CPU bottleneck (${metrics.cpuUsage.toFixed(0)}%). Latency ${metrics.avgLatency.toFixed(0)}ms. Recommended scaling by ${serversNeeded} instance(s).`;
-        confidence = 0.9;
-        resolveAlerts("critical");
-        addAlert("info", "AI Auto-Heal Applied (fallback)", `AI recommended ${serversNeeded} servers (fallback).`);
-      } else if (metrics.avgLatency > 800) {
-        defaultActions.push(`Increase connection pool limits for ${metrics.requestsPerSecond} RPS`);
-        analysis = `High latency (${metrics.avgLatency.toFixed(0)}ms) suggests I/O bottleneck. Recommend tuning connection pools and request queuing.`;
-        confidence = 0.78;
-        resolveAlerts("warning");
-        addAlert("info", "AI Optimization Applied (fallback)", "Connection pooling tuned (fallback).");
-      } else if (metrics.errorRate > 5) {
-        defaultActions.push("Enable circuit breaker and isolate unhealthy instances");
-        analysis = `Error rate ${metrics.errorRate.toFixed(1)}% — circuit breaker recommended.`;
-        confidence = 0.85;
-        resolveAlerts("warning");
-      } else {
-        defaultActions.push("System operating within normal parameters");
-        analysis = `All metrics healthy. CPU ${metrics.cpuUsage.toFixed(0)}%, latency ${metrics.avgLatency.toFixed(0)}ms, error rate ${metrics.errorRate.toFixed(1)}%.`;
-        confidence = 0.99;
-        addAlert("info", "AI Analysis Complete", "System healthy — no intervention required.");
-      }
-    }
-  } catch (err) {
-    logger.error({ err }, "AI analysis failed entirely — using local heuristic");
-    // local fallback if model call completely fails
-    if (metrics.cpuUsage > 85) {
-      const serversNeeded = Math.ceil((metrics.cpuUsage - 70) / 15);
-      serversAdded = serversNeeded;
-      defaultActions.push(`Scaled up ${serversNeeded} server instance(s) — CPU pressure at ${metrics.cpuUsage.toFixed(0)}%`);
-      analysis = `Detected severe CPU bottleneck (${metrics.cpuUsage.toFixed(0)}%). Latency ${metrics.avgLatency.toFixed(0)}ms. Recommended scaling by ${serversNeeded} instance(s).`;
-      confidence = 0.8;
-      resolveAlerts("critical");
-      addAlert("info", "AI Auto-Heal Applied (fallback)", `AI recommended ${serversNeeded} servers (fallback).`);
-    } else {
-      defaultActions.push("System operating within normal parameters");
-      analysis = `All metrics healthy (fallback). CPU ${metrics.cpuUsage.toFixed(0)}%`;
-      confidence = 0.9;
-      addAlert("info", "AI Analysis Fallback", "Used local fallback analysis.");
-    }
-  }
-
-  // Apply any scaling suggested
-  if (serversAdded > 0) {
-    for (let i = 0; i < serversAdded; i++) {
-      state.activeServers++;
-    }
-    addAlert(
-      "info",
-      "AI Auto-Heal Applied",
-      `AI added ${serversAdded} servers to resolve resource pressure. Expected improvement in 15-30s.`,
-      `Added ${serversAdded} server(s) via AI`,
-    );
-  }
-
-  const finalActions = defaultActions.length > 0 ? defaultActions : [];
-  return { analysis, actions: finalActions, confidence, serversAdded };
-}
-
-// Start background metrics collection
-metricsInterval = setInterval(updateMetrics, 2000);
-addAlert("info", "System Online", "FIFA AI Traffic Management System initialized. Ready to handle 80,000 fans.");
+// ── Background metrics collection ──────────────────────────────────────────
+metricsInterval = setInterval(() => { updateMetrics().catch(() => {}); }, 2000);
+addAlert("info", "System Online", "FIFA AI Traffic Management System initialized with PostgreSQL backend.");

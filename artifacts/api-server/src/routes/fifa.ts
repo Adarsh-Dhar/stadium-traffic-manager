@@ -45,7 +45,7 @@ router.post("/ticket/validate", async (req, res): Promise<void> => {
 
   const startTime = Date.now();
   const { ticketId } = parsed.data;
-  const result = validateTicket(ticketId);
+  const result = await validateTicket(ticketId);
 
   if (result.overloaded) {
     res.status(503).json({
@@ -70,7 +70,7 @@ router.post("/ticket/scan", async (req, res): Promise<void> => {
   }
 
   const { ticketId, gate } = parsed.data;
-  const result = scanTicket(ticketId, gate);
+  const result = await scanTicket(ticketId, gate);
 
   res.json({
     success: result.success,
@@ -120,7 +120,7 @@ router.post("/admin/scale", async (req, res): Promise<void> => {
 
 // POST /admin/reset
 router.post("/admin/reset", async (_req, res): Promise<void> => {
-  resetSystem();
+  await resetSystem();
   res.json({ status: "reset" });
 });
 
