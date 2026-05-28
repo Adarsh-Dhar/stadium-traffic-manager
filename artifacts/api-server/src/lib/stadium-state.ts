@@ -285,9 +285,10 @@ export async function validateTicket(ticketId: string): Promise<{ valid: boolean
   state.requestCount++;
   state.totalRequests++;
 
-  // Check pool pressure — if too many clients waiting, return 503 immediately
+  // Check pool pressure — only consider overloaded when queue is genuinely high
   const poolStats = pool as any;
-  const isOverloaded = (poolStats.waitingCount ?? 0) > 10 || (state.cpuUsage > 90 && Math.random() < 0.3);
+  const waitingClients = poolStats.waitingCount ?? 0;
+  const isOverloaded = waitingClients > 50 || (state.cpuUsage > 90 && Math.random() < 0.3);
 
   if (isOverloaded) {
     recordLatency(Date.now() - t0);
