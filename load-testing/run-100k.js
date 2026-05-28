@@ -17,6 +17,13 @@ import { createHash } from "crypto";
 
 const BASE = process.env.API_URL ?? "http://localhost:5000";
 
+// SECURITY_HEADERS: when DT_SECURITY=true and LOAD_TEST_API_KEY is set,
+// include the shared secret as an x-api-key header on every request.
+const SECURITY_HEADERS =
+  process.env.DT_SECURITY === "true" && process.env.LOAD_TEST_API_KEY
+    ? { "x-api-key": process.env.LOAD_TEST_API_KEY }
+    : {};
+
 // ─── MEMORY STRESS CONFIG ──────────────────────────────────────────────────
 // These are the knobs to make your memory go KABOOM ⚡
 const TOTAL_TICKETS     = 100_000;
@@ -164,14 +171,14 @@ function simulateQRValidation(ticketId) {
 async function post(path, body) {
   const res = await fetch(`${BASE}${path}`, {
     method:  "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...SECURITY_HEADERS },
     body:    JSON.stringify(body),
   });
   return { status: res.status, data: await res.json().catch(() => ({})) };
 }
 
 async function get(path) {
-  const res = await fetch(`${BASE}${path}`);
+  const res = await fetch(`${BASE}${path}`, { headers: { ...SECURITY_HEADERS } });
   if (!res.ok) return null;
   return res.json().catch(() => null);
 }
@@ -267,6 +274,13 @@ async function sendOne(n) {
     if (nextWave && nextWave.concurrency !== currentConcurrency) {
       const ts = new Date().toISOString().slice(11, 19);
       scaleEvents.push(`[${ts}] 🌊 Wave: ${currentConcurrency} → ${nextWave.concurrency} workers`);
+      // Emit a Dynatrace event via the API (best-effort, do not block)
+      post("/api/fifa/admin/log-event", {
+        title: `Wave: ${nextWave.concurrency} workers`,
+        description: `Wave escalated to ${nextWave.concurrency} workers`,
+        severity: "CUSTOM_ALERT",
+      }).catch(() => {});
+
       currentConcurrency = nextWave.concurrency;
     }
   }

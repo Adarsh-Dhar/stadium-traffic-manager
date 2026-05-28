@@ -21,6 +21,7 @@ import {
   getMcpStatus,
 } from "../lib/stadium-state.js";
 import { logger } from "../lib/logger.js";
+import { pushEvent } from "../lib/dynatrace.js";
 import {
   getAllMatches,
   getUpcomingMatches,
@@ -138,6 +139,23 @@ router.post("/admin/ai-analyze", async (_req, res): Promise<void> => {
   } catch (err: any) {
     logger.error({ err }, "/admin/ai-analyze failed");
     res.status(500).json({ error: "AI analysis failed", details: String(err?.message ?? err) });
+  }
+});
+
+// POST /admin/log-event
+router.post("/admin/log-event", async (req, res): Promise<void> => {
+  try {
+    const { title = "manual", description = "", severity = "INFO" } = req.body || {};
+    const ok = await pushEvent(title, description, severity as any);
+    if (!ok) {
+      logger.error("/admin/log-event failed");
+      res.status(500).json({ success: false, error: "dynatrace ingest failed" });
+      return;
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    logger.error({ err }, "/admin/log-event failed");
+    res.status(500).json({ success: false, error: String(err?.message ?? err) });
   }
 });
 
