@@ -123,17 +123,13 @@ async function fetchRps() {
 // ---------------------------------------------------------------------------
 async function patchReplicas(targetReplicas) {
   const patch = { spec: { replicas: targetReplicas } };
-
   // Use strategic-merge-patch so only `spec.replicas` is touched
-  const options = { headers: { 'Content-Type': 'application/strategic-merge-patch+json' } };
-
-  await appsV1.patchNamespacedDeployment(
-    CONFIG.deploymentName,
-    CONFIG.namespace,
-    patch,
-    undefined, undefined, undefined, undefined, undefined,
-    options,
-  );
+  await appsV1.patchNamespacedDeployment({
+    name: CONFIG.deploymentName,
+    namespace: CONFIG.namespace,
+    body: patch,
+    headers: { 'Content-Type': 'application/strategic-merge-patch+json' },
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -162,16 +158,16 @@ async function tick() {
     const wasCapped                = target !== raw;
   const zoneChanged    = zone !== currentZone;
 
-  // 3. Emit zone-level log
-  if (zone === 'GREEN') {
-      const formulaStr = `${rps.toLocaleString()} / ${CONFIG.rpsPerReplica} = ${(rps / CONFIG.rpsPerReplica).toFixed(1)} → ${raw}${wasCapped ? ` (capped at ${CONFIG.maxReplicas})` : ''}`;
-      const actionStr  = describeAction(target, currentReplicas, raw, wasCapped);
+    // 3. Emit zone-level log
+    const formulaStr = `${rps.toLocaleString()} / ${CONFIG.rpsPerReplica} = ${(rps / CONFIG.rpsPerReplica).toFixed(1)} → ${raw}${wasCapped ? ` (capped at ${CONFIG.maxReplicas})` : ''}`;
+    const actionStr  = describeAction(target, currentReplicas, raw, wasCapped);
+    if (zone === 'GREEN') {
       log.info(`RPS=${rps.toLocaleString()}  Zone=GREEN   | Formula: ${formulaStr} | Desired=${target} | Action: ${actionStr}`);
-  } else if (zone === 'YELLOW') {
+    } else if (zone === 'YELLOW') {
       log.warn(`RPS=${rps.toLocaleString()}  Zone=YELLOW  | Formula: ${formulaStr} | Desired=${target} | Action: ${actionStr}`);
-  } else {
+    } else {
       log.critical(`RPS=${rps.toLocaleString()}  Zone=RED     | Formula: ${formulaStr} | Desired=${target} | Action: ${actionStr}`);
-  }
+    }
 
   // 4. Decide whether to patch
     if (target === currentReplicas) {
