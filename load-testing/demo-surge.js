@@ -49,7 +49,6 @@ export default function () {
 }
 
 export function handleSummary(data) {
-  const fs = require('fs');
   const summary = {
     vus: data.metrics.vus ? data.metrics.vus.count : undefined,
     http_reqs: data.metrics.http_reqs ? data.metrics.http_reqs.total : undefined,
@@ -60,8 +59,7 @@ export function handleSummary(data) {
     overload_503: data.metrics.fifa_overloaded_503 ? data.metrics.fifa_overloaded_503.total : 0
   };
 
-  try { fs.writeFileSync('load-testing/demo-surge-results.json', JSON.stringify(summary, null, 2)); } catch (e) { /* ignore */ }
-
+  const out = JSON.stringify(summary, null, 2);
   console.log('\n=== Demo Surge Results ===');
   console.log('Total requests:', summary.http_reqs);
   console.log('Throughput (approx):', summary.throughput);
@@ -69,7 +67,10 @@ export function handleSummary(data) {
   console.log('P99(ms):', summary.p99);
   console.log('Error count:', summary.errors);
   console.log('503 count:', summary.overload_503);
-  console.log('Results saved: load-testing/demo-surge-results.json');
 
-  return { 'stdout': JSON.stringify(summary, null, 2) };
+  // Return files to write and stdout content — k6 will write the file when handleSummary returns a mapping
+  return {
+    stdout: out,
+    'load-testing/demo-surge-results.json': out
+  };
 }

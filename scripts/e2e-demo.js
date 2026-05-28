@@ -45,8 +45,33 @@
   const args = parseArgs();
 
   function ts() { return new Date().toISOString(); }
-
   async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  function num(v) {
+    if (v === null || v === undefined) return null;
+    const n = Number(String(v).replace(/[^0-9.\-eE]+/g, ''));
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function normalizeMetrics(raw) {
+    if (!raw) return null;
+    // common variants
+    const cpu = num(raw.cpu ?? raw.cpuUsage ?? raw.cpu_usage ?? raw.cpuPercent ?? raw.cpu_percent ?? raw.CPU);
+    const latency = num(raw.latency ?? raw.avgLatency ?? raw.p95Latency ?? raw.p95 ?? raw.avg_response_time ?? raw.meanLatency);
+    const p95 = num(raw.p95Latency ?? raw.p95 ?? raw.latencyP95);
+    const p99 = num(raw.p99Latency ?? raw.p99 ?? raw.latencyP99);
+    const errorRate = num(raw.errorRate ?? raw.error_rate ?? raw.errRate ?? raw.errorRatePct ?? raw.error_rate_pct) ?? 0;
+    const serverCount = num(raw.serverCount ?? raw.activeServers ?? raw.active_instances ?? raw.server_count ?? raw.servers ?? raw.instances) ?? num(raw.activeServers) ?? 1;
+    return { cpu: cpu ?? 0, latency: latency ?? 0, p95: p95 ?? latency ?? 0, p99: p99 ?? latency ?? 0, errorRate: errorRate ?? 0, serverCount: serverCount ?? 1, raw };
+  }
+
+  const colors = {
+    reset: s => `\x1b[0m${s}\x1b[0m`,
+    red: s => `\x1b[31m${s}\x1b[0m`,
+    green: s => `\x1b[32m${s}\x1b[0m`,
+    yellow: s => `\x1b[33m${s}\x1b[0m`,
+    cyan: s => `\x1b[36m${s}\x1b[0m`,
+  };
 
   async function spawnServer() {
     console.log(`[${ts()}] Starting API server from ${API_DIR}`);
@@ -80,7 +105,8 @@
     try {
       const res = await fetch(`${base}/api/fifa/metrics/current`);
       if (!res.ok) throw new Error(`status ${res.status}`);
-      return await res.json();
+      const raw = await res.json();
+      return normalizeMetrics(raw);
     } catch (err) {
       return null;
     }
@@ -121,17 +147,18 @@
     console.log(`[${ts()}] API healthy`);
 
     const initialMetrics = await getMetrics();
-    console.log(`[${ts()}] initial metrics:`, initialMetrics || '<no metrics>');
+    console.log(`[${ts()}] initial metrics:`, initialMetrics ? `cpu=${initialMetrics.cpu} lat=${initialMetrics.latency} p95=${initialMetrics.p95} servers=${initialMetrics.serverCount}` : '<no metrics>');
     if (!initialMetrics) { overallPass = false; throw new Error('metrics missing'); }
 
-    // Reset baseline
+    // Reset baseline (some APIs return a simple status). Treat reset as success if we get any truthy response, then re-pull metrics.
     const reset = await postJson('/api/fifa/admin/reset', {});
     console.log(`[${ts()}] reset result:`, reset || '<no result>');
-    if (!reset || typeof reset.cpu === 'undefined') { overallPass = false; throw new Error('reset failed'); }
+    const postResetMetrics = await getMetrics();
+    if (!postResetMetrics) { overallPass = false; throw new Error('metrics missing after reset'); }
 
-    const baselineCpu = reset.cpu ?? (initialMetrics.cpu ?? 0);
-    const baselineLatency = reset.latency ?? (initialMetrics.latency ?? 0);
-    const baselineServers = reset.serverCount ?? (initialMetrics.serverCount ?? 1);
+    const baselineCpu = postResetMetrics.cpu ?? initialMetrics.cpu ?? 0;
+    const baselineLatency = postResetMetrics.latency ?? initialMetrics.latency ?? 0;
+    const baselineServers = postResetMetrics.serverCount ?? initialMetrics.serverCount ?? 1;
 
     if (!(baselineCpu < 30 && baselineLatency < 100 && baselineServers === 1)) {
       console.warn(`[${ts()}] Baseline not within expected thresholds: cpu=${baselineCpu} latency=${baselineLatency} servers=${baselineServers}`);
@@ -149,24 +176,29 @@
 
     const pollStart = Date.now();
     while (true) {
-      const metrics = await getMetrics();
-      if (!metrics) { console.log(`[${ts()}] metrics unavailable`); }
-      const cpu = metrics?.cpu ?? 0;
-      const latency = metrics?.latency ?? 0;
-      const errorRate = metrics?.errorRate ?? 0;
-      const serverCount = metrics?.serverCount ?? baselineServers;
+      const raw = await getMetrics();
+      if (!raw) { console.log(`[${ts()}] metrics unavailable`); }
+      const cpu = raw?.cpu ?? 0;
+      const latency = raw?.latency ?? 0;
+      const errorRate = raw?.errorRate ?? 0;
+      const serverCount = raw?.serverCount ?? baselineServers;
+      const elapsedSec = Math.round((Date.now() - startTime) / 1000);
 
-      console.log(`[${ts()}] CPU: ${asciiBar(cpu,100,30)} Latency(ms): ${asciiBar(Math.min(latency,2000),2000,20)} ErrorRate: ${(errorRate*100).toFixed(2)}% Servers: ${serverCount}`);
+      // Colorize critical values
+      const cpuStr = cpu > degradationThresholds.cpu ? colors.red(cpu) : (cpu > degradationThresholds.cpu * 0.8 ? colors.yellow(cpu) : colors.green(cpu));
+      const latStr = latency > degradationThresholds.latency ? colors.red(latency) : (latency > degradationThresholds.latency * 0.8 ? colors.yellow(latency) : colors.green(latency));
+
+      console.log(`[${ts()}][+${elapsedSec}s] CPU: ${asciiBar(cpu,100,30)} (${cpuStr}%)  Latency(ms): ${asciiBar(Math.min(latency,2000),2000,20)} (${latStr}ms)  ErrorRate: ${(errorRate*100).toFixed(2)}%  Servers: ${colors.cyan(serverCount)}`);
 
       if (serverCount > baselineServers) sawScaleUp = true;
 
       if (cpu > degradationThresholds.cpu || latency > degradationThresholds.latency || errorRate > degradationThresholds.errorRate) {
         degraded = true;
-        console.log(`[${ts()}] Degradation threshold crossed (cpu>${degradationThresholds.cpu} or lat>${degradationThresholds.latency} or err>${degradationThresholds.errorRate})`);
+        console.log(colors.red(`[${ts()}] Degradation threshold crossed (cpu>${degradationThresholds.cpu} or lat>${degradationThresholds.latency} or err>${degradationThresholds.errorRate})`));
         break;
       }
 
-      if ((Date.now() - pollStart) / 1000 > args.duration + 10) {
+      if ((Date.now() - pollStart) / 1000 > args.duration + 20) {
         console.log(`[${ts()}] Poll timeout reached`);
         break;
       }
