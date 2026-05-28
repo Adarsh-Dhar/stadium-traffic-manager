@@ -13,9 +13,9 @@ if (!process.env.DATABASE_URL) {
 // Raise to 50 to make the system handle more; leave at 20 to see it struggle.
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  max: 50,               // increased to 50 to provide headroom under heavy load
+  max: 100,               // increased to 100 to provide headroom under heavy load
   idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 5_000,  // fail fast when pool is full
+  connectionTimeoutMillis: 8_000,  // allow a bit more time when pool is busy
 });
 
 pool.on("error", (err) => {

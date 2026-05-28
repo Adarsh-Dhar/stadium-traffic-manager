@@ -222,7 +222,7 @@ async function printMetrics() {
   console.log("╚──────────────────────────────────────────────────────────────────────╝");
 
   console.log("");
-  console.log("  ⏱️  Latency        : avg ${avgc}ms   p95 ${p95c}ms   p99 ${p99c}ms")
+  console.log(`  ⏱️  Latency        : avg ${avgc}ms   p95 ${p95c}ms   p99 ${p99c}ms`)
   console.log(`  📈 Error Rate     : ${color(errPct, 5, 15)}%`);
   console.log("");
 

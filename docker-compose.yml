@@ -13,8 +13,12 @@ services:
       DYNATRACE_ENV_ID: ${DYNATRACE_ENV_ID}
       DYNATRACE_API_TOKEN: ${DYNATRACE_API_TOKEN}
       DYNATRACE_CLUSTER_URL: ${DYNATRACE_CLUSTER_URL}
+      DATABASE_URL: postgresql://stadium:stadium@postgres:5432/stadium
     networks:
       - fifa-network
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/healthz"]
       interval: 10s
@@ -50,6 +54,20 @@ services:
       - fifa-network
     depends_on:
       - api-server
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: stadium
+      POSTGRES_PASSWORD: stadium
+      POSTGRES_DB: stadium
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stadium"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 networks:
   fifa-network:

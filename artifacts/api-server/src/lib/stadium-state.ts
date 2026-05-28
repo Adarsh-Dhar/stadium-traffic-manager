@@ -288,7 +288,7 @@ export async function validateTicket(ticketId: string): Promise<{ valid: boolean
   // Check pool pressure — only consider overloaded when queue is genuinely high
   const poolStats = pool as any;
   const waitingClients = poolStats.waitingCount ?? 0;
-  const isOverloaded = waitingClients > 50 || (state.cpuUsage > 90 && Math.random() < 0.3);
+  const isOverloaded = waitingClients > 150 || (state.cpuUsage > 95 && Math.random() < 0.5);
 
   if (isOverloaded) {
     recordLatency(Date.now() - t0);
