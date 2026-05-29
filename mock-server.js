@@ -17,27 +17,88 @@ const { URL } = require('url');
 let simulatedContainers = 2;
 let lastAction = 'initialized';
 
-function generateRps() {
-  // Weighted bands with ranges (numbers use separators for readability)
-  const bands = [
-    { min: 1_000,  max: 3_000,  weight: 30 },
-    { min: 3_000,  max: 6_000,  weight: 25 },
-    { min: 6_000,  max: 9_000,  weight: 20 },
-    { min: 9_000,  max: 10_000, weight: 10 },
-    { min: 10_000, max: 15_000, weight: 10 },
-    { min: 15_000, max: 20_000, weight: 5 },
-  ];
+const POLL_MS   = 5_000;
+const MATCH_MIN = 150;
+const REAL_SECS_PER_MATCH_MIN = 10;
 
-  const total = bands.reduce((s, b) => s + b.weight, 0);
-  let pick = Math.floor(Math.random() * total);
-  for (const b of bands) {
-    if (pick < b.weight) {
-      return Math.floor(Math.random() * (b.max - b.min + 1) + b.min);
-    }
-    pick -= b.weight;
-  }
-  return bands[0].min;
+let currentRps   = 1_000;
+let matchSeconds = 0;
+
+const PHASES = [
+  { start:   0, end:  20, base:  1_000, peak:  6_000, label: 'PRE_MATCH'   },
+  { start:  20, end:  30, base:  6_000, peak: 14_000, label: 'KICKOFF'     },
+  { start:  30, end:  65, base:  8_000, peak: 16_000, label: 'FIRST_HALF'  },
+  { start:  65, end:  80, base:  3_000, peak:  7_000, label: 'HALF_TIME'   },
+  { start:  80, end: 115, base:  7_000, peak: 18_500, label: 'SECOND_HALF' },
+  { start: 115, end: 130, base:  5_000, peak: 19_000, label: 'FULL_TIME'   },
+  { start: 130, end: 150, base:    800, peak:  3_000, label: 'POST_MATCH'  },
+];
+
+const GOAL_EVENTS = [42, 67, 88, 104].map(min => ({
+  matchMin: min,
+  fired: false,
+  spikeRps: Math.floor(Math.random() * 3_000 + 17_000),
+}));
+
+function getMatchMinute() {
+  return matchSeconds / REAL_SECS_PER_MATCH_MIN;
 }
+
+function getCurrentPhase(matchMin) {
+  return PHASES.find(p => matchMin >= p.start && matchMin < p.end) || PHASES[PHASES.length - 1];
+}
+
+function computeTarget(matchMin) {
+  const phase    = getCurrentPhase(matchMin);
+  const progress = (matchMin - phase.start) / (phase.end - phase.start);
+  const wave     = Math.sin(progress * Math.PI);
+
+  for (const goal of GOAL_EVENTS) {
+    const dist = matchMin - goal.matchMin;
+    if (dist >= 0 && dist < 2) {
+      const fade = 1 - (dist / 2);
+      return Math.floor(goal.spikeRps * fade + phase.base * (1 - fade));
+    }
+  }
+
+  const amplitude = phase.peak - phase.base;
+  const target    = phase.base + amplitude * wave;
+  const noise     = (Math.random() - 0.5) * 0.16 * target;
+  return Math.floor(Math.max(500, target + noise));
+}
+
+const MAX_STEP_RATIO = 0.18;
+
+function stepToward(current, target) {
+  const maxStep = Math.max(200, current * MAX_STEP_RATIO);
+  const diff    = target - current;
+  const step    = Math.sign(diff) * Math.min(Math.abs(diff), maxStep);
+  return Math.floor(current + step);
+}
+
+function advanceSimulation() {
+  matchSeconds += POLL_MS / 1000;
+  const matchMin = getMatchMinute();
+
+  if (matchMin >= MATCH_MIN) {
+    matchSeconds = 0;
+    GOAL_EVENTS.forEach(g => { g.fired = false; });
+    console.log('[sim] Match complete — restarting simulation');
+  }
+
+  const target = computeTarget(matchMin);
+  currentRps   = stepToward(currentRps, target);
+
+  const phase = getCurrentPhase(matchMin);
+  console.log(
+    `[sim] ${phase.label.padEnd(12)} | ` +
+    `match=${matchMin.toFixed(1).padStart(5)}min | ` +
+    `RPS=${String(currentRps).padStart(6)} | ` +
+    `target=${String(target).padStart(6)}`
+  );
+}
+
+setInterval(advanceSimulation, POLL_MS);
 
 function jsonResponse(res, statusCode, payload) {
   const body = JSON.stringify(payload);
@@ -65,10 +126,12 @@ const requestListener = async function (req, res) {
     const method = req.method;
 
     if (method === 'GET' && (path === '/' || path === '/metrics/rps')) {
-      const rps = generateRps();
-      lastAction = `generated ${rps} rps`;
-      console.log(`[mock] GET ${path} -> ${rps} RPS`);
-      return jsonResponse(res, 200, { rps });
+      const phase = getCurrentPhase(getMatchMinute());
+      return jsonResponse(res, 200, {
+        rps:    currentRps,
+        phase:  phase.label,
+        target: computeTarget(getMatchMinute()),
+      });
     }
 
     if (method === 'POST' && path === '/scale-up') {
@@ -91,7 +154,14 @@ const requestListener = async function (req, res) {
     }
 
     if (method === 'GET' && path === '/status') {
-      return jsonResponse(res, 200, { simulatedContainers, lastAction });
+      const phase = getCurrentPhase(getMatchMinute());
+      return jsonResponse(res, 200, {
+        simulatedContainers,
+        lastAction,
+        rps:      currentRps,
+        phase:    phase.label,
+        matchMin: getMatchMinute().toFixed(1),
+      });
     }
 
     return jsonResponse(res, 404, { error: 'not found', path });
@@ -109,4 +179,11 @@ server.listen(5000, '0.0.0.0', () => {
   console.log('  POST /scale-up');
   console.log('  POST /scale-down');
   console.log('  GET  /status');
+  console.log('');
+  console.log('Simulation parameters:');
+  console.log(`  Match duration: ${MATCH_MIN} minutes`);
+  console.log(`  Time scale: ${REAL_SECS_PER_MATCH_MIN} real seconds = 1 match minute`);
+  console.log(`  Full match plays out in ${(MATCH_MIN * REAL_SECS_PER_MATCH_MIN / 60).toFixed(1)} real minutes`);
+  console.log(`  Goal surge minutes: ${GOAL_EVENTS.map(g => g.matchMin).join(', ')}`);
+  console.log(`  Poll interval: ${POLL_MS / 1000}s`);
 });
