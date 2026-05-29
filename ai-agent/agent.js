@@ -348,18 +348,100 @@ Only recommend "add-server" if predicted_rps > ${ctx.baseline?.peak_rps ? Math.r
 Only recommend "remove-server" if predicted_rps < ${ctx.baseline?.peak_rps ? Math.round(ctx.baseline.peak_rps * 0.2) : 70} AND active servers > 1.`;
 }
 
+// ── Gemini free-tier rate limiter ─────────────────────────────────────────────
+//
+// Free tier limits for gemini-2.0-flash (as of Jan 2026):
+//   RPM  = 15  requests per minute   (rolling 60-second window)
+//   RPD  = 1500 requests per day      (resets at midnight Pacific)
+//
+// We track both locally so we can gate BEFORE sending the request, avoiding
+// wasted cycles and 429s.  On a genuine 429 from the API we fall back to
+// exponential backoff with jitter capped at 10 minutes.
+//
+// Override via env vars if you upgrade to a paid tier:
+//   GEMINI_RPM_LIMIT  (default 15)
+//   GEMINI_RPD_LIMIT  (default 1500)
+
+const GEMINI_RPM_LIMIT = Number(process.env.GEMINI_RPM_LIMIT  || 15);
+const GEMINI_RPD_LIMIT = Number(process.env.GEMINI_RPD_LIMIT  || 1500);
+const GEMINI_MAX_RETRIES = 4;
+
+// Sliding window: timestamps of each successful dispatch (ms)
+const _rpmWindow = [];   // entries older than 60 s are evicted on each check
+let   _rpdCount  = 0;
+let   _rpdDate   = new Date().toDateString(); // resets when the calendar day changes
+
+function _rpmSlots() {
+  const cutoff = Date.now() - 60_000;
+  while (_rpmWindow.length && _rpmWindow[0] < cutoff) _rpmWindow.shift();
+  return GEMINI_RPM_LIMIT - _rpmWindow.length;   // >0 means we have capacity
+}
+
+function _rpdSlots() {
+  const today = new Date().toDateString();
+  if (today !== _rpdDate) { _rpdDate = today; _rpdCount = 0; }  // midnight reset
+  return GEMINI_RPD_LIMIT - _rpdCount;
+}
+
+function _recordRequest() {
+  _rpmWindow.push(Date.now());
+  _rpdCount++;
+}
+
+// Wait until we have at least one slot in both windows.
+// Logs a warning so the operator can see we are throttling.
+async function _waitForCapacity() {
+  while (true) {
+    const rpmSlots = _rpmSlots();
+    const rpdSlots = _rpdSlots();
+
+    if (rpdSlots <= 0) {
+      // Daily quota exhausted — nothing we can do until midnight Pacific.
+      const msUntilMidnight = (() => {
+        const now = new Date();
+        const midnight = new Date(now);
+        midnight.setUTCHours(7, 0, 0, 0);          // midnight PT = 07:00 UTC (PST)
+        if (midnight <= now) midnight.setUTCDate(midnight.getUTCDate() + 1);
+        return midnight - now;
+      })();
+      const hh = Math.floor(msUntilMidnight / 3_600_000);
+      const mm = Math.floor((msUntilMidnight % 3_600_000) / 60_000);
+      console.warn(`[gemini] ⛔ Daily quota exhausted (${_rpdCount}/${GEMINI_RPD_LIMIT} RPD). Next reset in ${hh}h ${mm}m. Skipping this cycle.`);
+      throw new Error("GEMINI_RPD_EXHAUSTED");
+    }
+
+    if (rpmSlots <= 0) {
+      // Minute window full — find how long until the oldest slot expires.
+      const oldest = _rpmWindow[0];
+      const waitMs = (oldest + 60_000) - Date.now() + 50; // +50 ms buffer
+      console.warn(`[gemini] ⏳ RPM limit reached (${GEMINI_RPM_LIMIT}/min). Waiting ${Math.ceil(waitMs / 1000)}s …`);
+      await sleep(waitMs);
+      continue;   // re-check after waiting
+    }
+
+    // Both windows have capacity.
+    console.log(`[gemini] quota: ${_rpmSlots()} RPM slots, ${_rpdSlots()} RPD slots remaining`);
+    return;
+  }
+}
+
 // ── Call Gemini ───────────────────────────────────────────────────────────────
 async function callGemini(promptText) {
   if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY not set in .env");
 
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  // Gate on local quota counters before touching the network.
+  await _waitForCapacity();
+
+  const body = {
+    contents: [{ role: "user", parts: [{ text: promptText }] }],
+    generationConfig: { temperature: 0.15, maxOutputTokens: 2048 },
+  };
+
+  for (let attempt = 1; attempt <= GEMINI_MAX_RETRIES; attempt++) {
     const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), 20_000);
+    const tid = setTimeout(() => controller.abort(), 30_000);
+
     try {
-      const body = {
-        contents: [{ role: "user", parts: [{ text: promptText }] }],
-        generationConfig: { temperature: 0.15, maxOutputTokens: 1024 },
-      };
       const resp = await fetch(GEMINI_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -367,29 +449,58 @@ async function callGemini(promptText) {
         signal: controller.signal,
       });
       clearTimeout(tid);
+
+      if (resp.status === 429) {
+        // A 429 means our local counter drifted (e.g. another process, or
+        // Gemini returned a 429 before we expected it).  Back off with
+        // exponential delay + jitter, then re-check local capacity.
+        const retryAfterHeader = resp.headers.get("retry-after");
+        const serverWait = retryAfterHeader ? Number(retryAfterHeader) * 1000 : null;
+        const backoff = serverWait ?? Math.min(60_000 * attempt, 600_000); // cap at 10 min
+        const jitter  = Math.floor(Math.random() * 5_000);
+        const wait    = backoff + jitter;
+        console.warn(`[gemini] 429 rate-limited (attempt ${attempt}/${GEMINI_MAX_RETRIES}). Backing off ${Math.round(wait / 1000)}s …`);
+        if (attempt < GEMINI_MAX_RETRIES) {
+          await sleep(wait);
+          await _waitForCapacity();   // re-check before next attempt
+          continue;
+        }
+        throw new Error("Gemini 429 — rate limit exceeded after all retries");
+      }
+
       if (!resp.ok) {
         const txt = await resp.text().catch(() => "<no body>");
         console.warn(`[gemini] HTTP ${resp.status}: ${txt.slice(0, 200)}`);
-        if ([429, 502, 503, 504].includes(resp.status) && attempt < 3) {
-          await sleep(600 * attempt); continue;
+        if ([502, 503, 504].includes(resp.status) && attempt < GEMINI_MAX_RETRIES) {
+          const backoff = Math.min(60_000 * attempt, 600_000); // cap at 10 min
+          const jitter = Math.floor(Math.random() * 5_000);
+          const wait = backoff + jitter;
+          console.warn(`[gemini] ${resp.status} unavailable (attempt ${attempt}/${GEMINI_MAX_RETRIES}). Backing off ${Math.round(wait / 1000)}s …`);
+          await sleep(wait);
+          continue;
         }
-        throw new Error(`Gemini ${resp.status}`);
+        throw new Error(`Gemini HTTP ${resp.status}`);
       }
+
+      // Request succeeded — record it against both windows.
+      _recordRequest();
+
       const json = await resp.json();
-      // Extract text from generateContent response shape
       const text = json?.candidates?.[0]?.content?.parts?.[0]?.text || "";
       return text;
+
     } catch (err) {
       clearTimeout(tid);
       if (err?.name === "AbortError") {
-        console.warn(`[gemini] Timeout attempt ${attempt}`);
-        if (attempt < 3) { await sleep(500 * attempt); continue; }
+        console.warn(`[gemini] Request timed out (attempt ${attempt}/${GEMINI_MAX_RETRIES})`);
+        if (attempt < GEMINI_MAX_RETRIES) { await sleep(3_000 * attempt); continue; }
       }
-      if (attempt < 3) { await sleep(500 * attempt); continue; }
+      if (err.message === "GEMINI_RPD_EXHAUSTED") throw err;   // don't retry
+      if (attempt < GEMINI_MAX_RETRIES) { await sleep(2_000 * attempt); continue; }
       throw err;
     }
   }
-  throw new Error("Gemini failed after 3 attempts");
+  throw new Error("Gemini failed after all retries");
 }
 
 // ── Parse model output ────────────────────────────────────────────────────────
@@ -404,6 +515,26 @@ function parseModelOutput(raw) {
   // Try to find JSON object in the text
   const match = raw.match(/\{[\s\S]*\}/);
   if (match) { try { return JSON.parse(match[0]); } catch (_) {} }
+  // Handle truncated JSON: try to close incomplete objects and strings
+  const truncatedMatch = raw.match(/\{[\s\S]*/);
+  if (truncatedMatch) {
+    let truncated = truncatedMatch[0];
+    // Check if the last quote is unclosed (truncated string)
+    const quotes = (truncated.match(/"/g) || []).length;
+    if (quotes % 2 !== 0) {
+      truncated += '"'; // Close the truncated string
+    }
+    // Count braces and add missing closing braces
+    let openBraces = 0;
+    for (const char of truncated) {
+      if (char === '{') openBraces++;
+      else if (char === '}') openBraces--;
+    }
+    if (openBraces > 0) {
+      truncated += '}'.repeat(openBraces);
+    }
+    try { return JSON.parse(truncated); } catch (_) {}
+  }
   return null;
 }
 
@@ -421,6 +552,10 @@ async function runOnce() {
     console.log("[gemini] Raw output:", raw?.slice(0, 600));
     parsed = parseModelOutput(raw);
   } catch (err) {
+    if (err.message === "GEMINI_RPD_EXHAUSTED") {
+      console.warn("[agent] Daily quota exhausted — skipping cycle, will retry next interval");
+      return;
+    }
     console.error(`[gemini] Call failed: ${err}`);
     return;
   }
@@ -465,8 +600,16 @@ async function mainLoop() {
   console.log(`[agent]   Model    : ${GEMINI_MODEL}`);
   console.log(`[agent]   API Base : ${API_BASE}`);
   console.log(`[agent]   Game     : ${GAME_TYPE}`);
-  console.log(`[agent]   Interval : ${INTERVAL}ms`);
+  console.log(`[agent]   Interval : ${INTERVAL}ms  (${Math.round(86400000 / INTERVAL)} calls/day max)`);
   console.log(`[agent]   Dry Run  : ${DRY_RUN}`);
+  console.log(`[agent]   Quota    : RPM=${GEMINI_RPM_LIMIT}  RPD=${GEMINI_RPD_LIMIT}`);
+  // Warn if the interval would exceed the daily quota
+  const callsPerDay = Math.round(86400000 / INTERVAL);
+  if (callsPerDay > GEMINI_RPD_LIMIT) {
+    console.warn(`[agent] ⚠️  INTERVAL=${INTERVAL}ms → ${callsPerDay} calls/day exceeds RPD limit (${GEMINI_RPD_LIMIT}).`);
+    const safeInterval = Math.ceil(86400000 / GEMINI_RPD_LIMIT);
+    console.warn(`[agent]    Set AGENT_CHECK_INTERVAL>=${safeInterval} (${Math.round(safeInterval/1000)}s) to stay within the free tier.`);
+  }
   if (!GEMINI_API_KEY) console.warn("[agent] ⚠️  GEMINI_API_KEY is not set — predictions will fail");
 
   while (true) {
