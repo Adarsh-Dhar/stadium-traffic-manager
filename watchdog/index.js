@@ -22,6 +22,7 @@
 'use strict';
 
 const k8s = require('@kubernetes/client-node');
+const { execFile } = require('child_process');
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -135,8 +136,15 @@ async function patchReplicas(targetReplicas) {
   // - Newer: patchNamespacedDeployment({ name, namespace, body, headers })
   const fn = appsV1.patchNamespacedDeployment;
   if (typeof fn !== 'function') throw new Error('AppsV1Api.patchNamespacedDeployment not available');
+  // Provide both object-style and positional-style callers and try them
+  // in sequence so we work regardless of the installed client signature.
+  const callObject = async (body, headers) => fn.call(appsV1, {
+    name: CONFIG.deploymentName,
+    namespace: CONFIG.namespace,
+    body,
+    headers,
+  });
 
-  // Helper to call positional-style signature
   const callPositional = async (body, headers) => fn.call(
     appsV1,
     CONFIG.deploymentName,
@@ -150,38 +158,62 @@ async function patchReplicas(targetReplicas) {
     { headers }
   );
 
-  // Helper to call object-style signature
-  const callObject = async (body, headers) => fn.call(appsV1, {
-    name: CONFIG.deploymentName,
-    namespace: CONFIG.namespace,
-    body,
-    headers,
-  });
+  // Try JSON Patch with object-style, then positional-style. If both fail
+  // and indicate the server couldn't decode JSON Patch, fall back to
+  // strategic merge and try the same two signatures again.
+  let lastErr;
 
   try {
-    if (fn.length === 1) {
-      // Likely object-signature; try JSON Patch first
-      await callObject(jsonPatch, headersJsonPatch);
-    } else {
-      // Likely positional-signature; call with JSON Patch
-      await callPositional(jsonPatch, headersJsonPatch);
-    }
+    await callObject(jsonPatch, headersJsonPatch);
+    return;
   } catch (err) {
-    // If the server can't decode JSON Patch, fall back to strategic merge
-    const msg = String(err?.body ?? err?.message ?? err);
-    if (msg.includes('cannot unmarshal') || msg.includes('decode') || String(err?.statusCode) === '400') {
-      try {
-        if (fn.length === 1) {
-          await callObject(strategicPatch, headersStrategic);
-        } else {
-          await callPositional(strategicPatch, headersStrategic);
-        }
-      } catch (err2) {
-        throw err2;
-      }
-    } else {
-      throw err;
+    lastErr = err;
+  }
+
+  try {
+    await callPositional(jsonPatch, headersJsonPatch);
+    return;
+  } catch (err) {
+    lastErr = err;
+  }
+
+  const msg = String(lastErr?.body ?? lastErr?.message ?? lastErr);
+  if (msg.includes('cannot unmarshal') || msg.includes('decode') || String(lastErr?.statusCode) === '400') {
+    try {
+      await callObject(strategicPatch, headersStrategic);
+      return;
+    } catch (err) {
+      lastErr = err;
     }
+
+    try {
+      await callPositional(strategicPatch, headersStrategic);
+      return;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  // Final fallback: try `kubectl patch` via the CLI. This avoids relying on
+  // the generated client signature when that layer's parameter validation
+  // prevents a request from being sent.
+  try {
+    log.warn('Client SDK failed — attempting kubectl CLI fallback to patch deployment');
+    await new Promise((resolve, reject) => {
+      const patchBody = JSON.stringify({ spec: { replicas: targetReplicas } });
+      execFile('kubectl', [
+        '-n', CONFIG.namespace,
+        'patch', 'deployment', CONFIG.deploymentName,
+        '--type=merge', '-p', patchBody
+      ], (err, stdout, stderr) => {
+        if (err) return reject(new Error(`kubectl patch failed: ${stderr || stdout || err.message}`));
+        resolve(stdout);
+      });
+    });
+    return;
+  } catch (err) {
+    // If kubectl fallback also fails, surface the original client error
+    // (prefer detailed original error when available).
+    throw lastErr ?? err;
   }
 }
 
