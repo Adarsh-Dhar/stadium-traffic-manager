@@ -396,6 +396,12 @@ async function callGemini(promptText) {
 function parseModelOutput(raw) {
   if (!raw) return null;
   try { return JSON.parse(raw); } catch (_) {}
+  // Try to extract JSON from markdown code blocks
+  const codeBlockMatch = raw.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  if (codeBlockMatch) {
+    try { return JSON.parse(codeBlockMatch[1]); } catch (_) {}
+  }
+  // Try to find JSON object in the text
   const match = raw.match(/\{[\s\S]*\}/);
   if (match) { try { return JSON.parse(match[0]); } catch (_) {} }
   return null;

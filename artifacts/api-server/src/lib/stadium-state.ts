@@ -27,6 +27,11 @@ export interface SimulationState {
 
 // ── DB seed (runs once at startup) ────────────────────────────────────────
 async function seedTickets(): Promise<void> {
+  // Skip seeding in mock mode
+  if (!process.env.DATABASE_URL) {
+    logger.info("[db] Skipping seed in mock mode");
+    return;
+  }
   const result = await db.execute(sql`SELECT COUNT(*)::int AS c FROM tickets`);
   const count = (result.rows[0] as any).c as number;
   if (count >= 100_000) {
