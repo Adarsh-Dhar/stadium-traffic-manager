@@ -16,7 +16,6 @@
 
 import dotenv from "dotenv";
 import fetch from "node-fetch";
-import dynatrace from "./dynatrace-client.js";
 import actions from "./actions.js";
 
 dotenv.config();
@@ -221,8 +220,6 @@ async function gatherAllContext() {
     transitResult,
     trafficResult,
     apiResult,
-    dtProblems,
-    dtEvents,
   ] = await Promise.all([
     safeFetch("Redis tickets_scanned",   fetchRedisTickets),
     safeFetch("PostgreSQL baseline",     fetchHistoricalBaseline),
@@ -230,14 +227,12 @@ async function gatherAllContext() {
     safeFetch("Transit trains",          fetchTransit),
     safeFetch("Traffic congestion",      fetchTraffic),
     safeFetch("API server metrics",      fetchApiMetrics),
-    safeFetch("Dynatrace problems",      () => dynatrace.fetchProblems()),
-    safeFetch("Dynatrace events",        () => dynatrace.fetchEvents()),
   ]);
 
   // ── Verification table ────────────────────────────────────────────────────
   const sources = [
     redisResult, baselineResult, weatherResult, transitResult,
-    trafficResult, apiResult, dtProblems, dtEvents,
+    trafficResult, apiResult,
   ];
   console.log("\n╔══════════════════════════════════════════════════════╗");
   console.log("║          DATA SOURCE HEALTH CHECK                   ║");
@@ -259,8 +254,6 @@ async function gatherAllContext() {
     traffic:         trafficResult.ok  ? trafficResult.value  : null,
     apiMetrics:      apiResult.ok      ? apiResult.value.metrics : null,
     apiAlerts:       apiResult.ok      ? apiResult.value.alerts  : [],
-    dtProblems:      dtProblems.ok     ? dtProblems.value     : null,
-    dtEvents:        dtEvents.ok       ? dtEvents.value       : null,
   };
 }
 
@@ -304,9 +297,10 @@ ${ctx.apiMetrics ? JSON.stringify(ctx.apiMetrics, null, 2) : "unavailable"}
 === [6b] OPEN ALERTS (unresolved) ===
 ${openAlerts.length ? JSON.stringify(openAlerts, null, 2) : "none"}
 
-=== [7] DYNATRACE ===
-Problems: ${ctx.dtProblems?.json ? JSON.stringify(ctx.dtProblems.json).slice(0, 400) : "unavailable or no problems"}
-Events:   ${ctx.dtEvents?.json  ? JSON.stringify(ctx.dtEvents.json).slice(0, 400)  : "unavailable"}
+=== [7] DYNATRACE (live — use MCP tools) ===
+Call get_problems to check for active incidents.
+Call execute_dql with query "fetch metrics | filter metric.key == \"builtin:service.requestCount.total\" | limit 1" to get live RPS.
+Call get_entities to confirm api-server service health.
 
 === YOUR TASK ===
 Using ALL of the above signals together, respond ONLY with a valid JSON object (no markdown, no prose) matching this exact shape:
@@ -414,6 +408,17 @@ async function callGemini(promptText) {
   const body = {
     contents: [{ role: "user", parts: [{ text: promptText }] }],
     generationConfig: { temperature: 0.15, maxOutputTokens: 2048 },
+    extensions: [{
+      name: "dynatrace",
+      mcpServer: {
+        command: "npx",
+        args: ["-y", "@dynatrace-oss/dynatrace-mcp-server@latest"],
+        env: {
+          DT_ENVIRONMENT: process.env.DYNATRACE_CLUSTER_URL,
+          DT_PLATFORM_TOKEN: process.env.DYNATRACE_API_TOKEN,
+        }
+      }
+    }]
   };
 
   for (let attempt = 1; attempt <= GEMINI_MAX_RETRIES; attempt++) {
