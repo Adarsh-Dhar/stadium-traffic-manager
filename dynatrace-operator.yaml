@@ -1,0 +1,47 @@
+# Dynatrace Operator Manifest
+# 
+# This file should be replaced with the actual manifest generated from the Dynatrace UI:
+# 1. Go to Dynatrace UI → Deploy Dynatrace → Kubernetes
+# 2. Configure your environment (cluster, namespace, etc.)
+# 3. Copy the generated YAML manifest here
+#
+# Alternatively, use the Dynatrace Helm chart:
+# helm repo add dynatrace https://raw.githubusercontent.com/Dynatrace/dynatrace-operator/master/config/helm/repo
+# helm install dynatrace-operator dynatrace/dynatrace-operator --namespace dynatrace --create-namespace
+#
+# The operator will handle:
+# - OneAgent installation and lifecycle management
+# - Automatic injection into application pods
+# - Metrics and log collection
+# - RBAC permissions (no need for custom rbac.yaml)
+#
+# Example placeholder structure (replace with actual generated manifest):
+#
+# apiVersion: dynatrace.com/v1beta2
+# kind: DynaKube
+# metadata:
+#   name: dynakube
+#   namespace: dynatrace
+# spec:
+#   apiUrl: https://YOUR_ENV_ID.apps.dynatrace.com
+#   tokens: dynatrace
+#   oneAgent:
+#     classicFullStack:
+#       hostGroup: stadium-traffic-manager
+#   activeGate:
+#     enabled: true
+#     capabilities:
+#       - routing
+#       - kubernetesMonitoring
+#       - metricsIngest
+---
+# Secret for Dynatrace tokens (create this separately)
+# apiVersion: v1
+# kind: Secret
+# metadata:
+#   name: dynatrace
+#   namespace: dynatrace
+# type: Opaque
+# stringData:
+#   apiToken: YOUR_API_TOKEN
+#   paasToken: YOUR_PAAS_TOKEN

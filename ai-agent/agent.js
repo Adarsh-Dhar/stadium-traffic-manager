@@ -7,9 +7,8 @@
  *   [3] Open-Meteo     — live weather (rain, temperature, wind) — no API key needed
  *   [4] Transit.land   — upcoming trains to the stadium (or mock if key absent)
  *   [5] TomTom         — road congestion (or mock if key absent)
- *   [6] Prometheus     — live rate(http_requests_total[1m]) from the cluster
- *   [7] API Server     — current system metrics + active alerts
- *   [8] Dynatrace      — problems + events (optional)
+ *   [6] API Server     — current system metrics + active alerts
+ *   [7] Dynatrace      — problems + events (optional)
  *
  * The agent sends all of this to Gemini Flash and asks it to predict
  * the RPS for the NEXT interval, then optionally acts on the recommendation.
@@ -42,7 +41,6 @@ const ROAD_LAT         = process.env.ROAD_LAT         || STADIUM_LAT;
 const ROAD_LON         = process.env.ROAD_LON         || STADIUM_LON;
 const REDIS_URL        = process.env.REDIS_URL        || "redis://localhost:6379";
 const DATABASE_URL     = process.env.DATABASE_URL     || "";
-const PROMETHEUS_URL   = process.env.PROMETHEUS_URL   || "http://localhost:9090";
 const GAME_TYPE        = process.env.GAME_TYPE        || "regular_game";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -204,18 +202,6 @@ async function fetchTraffic() {
   };
 }
 
-// ── [6] Prometheus — live RPS from cluster ───────────────────────────────────
-async function fetchPrometheusRPS() {
-  const query = encodeURIComponent('rate(http_requests_total[1m])');
-  const url = `${PROMETHEUS_URL}/api/v1/query?query=${query}`;
-  const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
-  if (!r.ok) throw new Error(`Prometheus ${r.status}`);
-  const j = await r.json();
-  const results = j.data?.result || [];
-  if (!results.length) return { rps: 0, series: 0 };
-  const total = results.reduce((sum, s) => sum + parseFloat(s.value?.[1] || 0), 0);
-  return { rps: parseFloat(total.toFixed(2)), series: results.length };
-}
 
 // ── [7] API Server — system metrics + alerts ─────────────────────────────────
 async function fetchApiMetrics() {
@@ -234,7 +220,6 @@ async function gatherAllContext() {
     weatherResult,
     transitResult,
     trafficResult,
-    prometheusResult,
     apiResult,
     dtProblems,
     dtEvents,
@@ -244,7 +229,6 @@ async function gatherAllContext() {
     safeFetch("Open-Meteo weather",      fetchWeather),
     safeFetch("Transit trains",          fetchTransit),
     safeFetch("Traffic congestion",      fetchTraffic),
-    safeFetch("Prometheus RPS",          fetchPrometheusRPS),
     safeFetch("API server metrics",      fetchApiMetrics),
     safeFetch("Dynatrace problems",      () => dynatrace.fetchProblems()),
     safeFetch("Dynatrace events",        () => dynatrace.fetchEvents()),
@@ -253,7 +237,7 @@ async function gatherAllContext() {
   // ── Verification table ────────────────────────────────────────────────────
   const sources = [
     redisResult, baselineResult, weatherResult, transitResult,
-    trafficResult, prometheusResult, apiResult, dtProblems, dtEvents,
+    trafficResult, apiResult, dtProblems, dtEvents,
   ];
   console.log("\n╔══════════════════════════════════════════════════════╗");
   console.log("║          DATA SOURCE HEALTH CHECK                   ║");
@@ -273,7 +257,6 @@ async function gatherAllContext() {
     weather:         weatherResult.ok  ? weatherResult.value  : null,
     transit:         transitResult.ok  ? transitResult.value  : null,
     traffic:         trafficResult.ok  ? trafficResult.value  : null,
-    prometheus:      prometheusResult.ok ? prometheusResult.value : null,
     apiMetrics:      apiResult.ok      ? apiResult.value.metrics : null,
     apiAlerts:       apiResult.ok      ? apiResult.value.alerts  : [],
     dtProblems:      dtProblems.ok     ? dtProblems.value     : null,
@@ -315,17 +298,13 @@ ${ctx.transit ? JSON.stringify(ctx.transit, null, 2) : "unavailable"}
 ${ctx.traffic ? JSON.stringify(ctx.traffic, null, 2) : "unavailable"}
 (Traffic jam = delayed fan arrival = flat RPS now, then steep spike when jam clears)
 
-=== [6] PROMETHEUS — LIVE CLUSTER RPS ===
-${ctx.prometheus ? JSON.stringify(ctx.prometheus, null, 2) : "unavailable"}
-(rate(http_requests_total[1m]) — the current observed RPS in the cluster)
-
-=== [7] API SERVER — CURRENT SYSTEM METRICS ===
+=== [6] API SERVER — CURRENT SYSTEM METRICS ===
 ${ctx.apiMetrics ? JSON.stringify(ctx.apiMetrics, null, 2) : "unavailable"}
 
-=== [7b] OPEN ALERTS (unresolved) ===
+=== [6b] OPEN ALERTS (unresolved) ===
 ${openAlerts.length ? JSON.stringify(openAlerts, null, 2) : "none"}
 
-=== [8] DYNATRACE ===
+=== [7] DYNATRACE ===
 Problems: ${ctx.dtProblems?.json ? JSON.stringify(ctx.dtProblems.json).slice(0, 400) : "unavailable or no problems"}
 Events:   ${ctx.dtEvents?.json  ? JSON.stringify(ctx.dtEvents.json).slice(0, 400)  : "unavailable"}
 
