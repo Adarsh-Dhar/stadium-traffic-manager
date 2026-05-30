@@ -148,9 +148,11 @@ export async function resetSystem(): Promise<void> {
 
 export function getMcpStatus() {
   return {
-    connected: true,
+    connected: Boolean(process.env.DYNATRACE_ENV_ID && process.env.DYNATRACE_API_TOKEN),
     serverUrl: "npx @dynatrace-oss/dynatrace-mcp-server@latest",
-    toolsAvailable: ["get_metrics","get_problems","get_entities","get_events","get_synthetic_locations","push_metric","create_event"],
+    toolsAvailable: process.env.DYNATRACE_ENV_ID
+      ? ["push_metric", "create_event"]
+      : [],
     lastPing: mcpLastPing, eventsForwarded: mcpEventsForwarded,
     dynatraceEnvId: process.env["DYNATRACE_ENV_ID"] ?? null,
     status: process.env["DYNATRACE_ENV_ID"] ? "connected" : "simulated",

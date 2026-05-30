@@ -7,9 +7,9 @@ import { TrendingUp, Activity, Award } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 export default function Metrics() {
-  const { data: currentMetrics } = useGetCurrentMetrics();
-  const { data: capacity } = useGetStadiumCapacity();
-  const { data: history } = useGetMetricsHistory();
+  const { data: currentMetrics } = useGetCurrentMetrics({ query: { refetchInterval: 5000 } });
+  const { data: capacity } = useGetStadiumCapacity({ query: { refetchInterval: 10000 } });
+  const { data: history } = useGetMetricsHistory({ query: { refetchInterval: 5000 } });
 
   const chartData = (history || []).map((s) => ({
     t: new Date(s.timestamp).toLocaleTimeString(),
@@ -27,6 +27,10 @@ export default function Metrics() {
     totalAttendance: 1250000,
     averageAttendance: 44642,
   };
+
+  const ticketSalesPct = Math.min(100, Math.round(capacity?.occupancyPercent ?? 0));
+  const broadcastQuality = Math.max(0, 100 - (currentMetrics?.errorRate ?? 0) * 5);
+  const fanSentiment = Math.max(0, 100 - (currentMetrics?.avgLatency ?? 0) / 50);
 
   const statsToDisplay = [
     {
@@ -151,28 +155,28 @@ export default function Metrics() {
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-muted-foreground uppercase">Ticket Sales</span>
-                  <span className="text-lg font-bold text-primary">92%</span>
+                  <span className="text-lg font-bold text-primary">{ticketSalesPct}%</span>
                 </div>
                 <div className="w-full h-2 bg-card rounded-full overflow-hidden border border-border/30">
-                  <div className="w-[92%] h-full bg-primary"></div>
+                  <div className="h-full bg-primary" style={{ width: `${ticketSalesPct}%` }}></div>
                 </div>
               </div>
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-muted-foreground uppercase">Broadcast Quality</span>
-                  <span className="text-lg font-bold text-accent">98%</span>
+                  <span className="text-lg font-bold text-accent">{broadcastQuality.toFixed(0)}%</span>
                 </div>
                 <div className="w-full h-2 bg-card rounded-full overflow-hidden border border-border/30">
-                  <div className="w-[98%] h-full bg-accent"></div>
+                  <div className="h-full bg-accent" style={{ width: `${broadcastQuality}%` }}></div>
                 </div>
               </div>
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-muted-foreground uppercase">Fan Sentiment</span>
-                  <span className="text-lg font-bold text-secondary">95%</span>
+                  <span className="text-lg font-bold text-secondary">{fanSentiment.toFixed(0)}%</span>
                 </div>
                 <div className="w-full h-2 bg-card rounded-full overflow-hidden border border-border/30">
-                  <div className="w-[95%] h-full bg-secondary"></div>
+                  <div className="h-full bg-secondary" style={{ width: `${fanSentiment}%` }}></div>
                 </div>
               </div>
             </CardContent>
@@ -241,6 +245,46 @@ export default function Metrics() {
                 <Line type="monotone" dataKey="avg" stroke="var(--primary)" dot={false} name="Avg" />
                 <Line type="monotone" dataKey="p95" stroke="var(--accent)" dot={false} name="p95" />
                 <Line type="monotone" dataKey="p99" stroke="var(--destructive)" dot={false} name="p99" />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* RPS Chart */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}>
+        <Card className="border-border/50 bg-card/50">
+          <CardHeader>
+            <CardTitle className="text-sm uppercase tracking-wider">Requests / Second</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <XAxis dataKey="t" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
+                <YAxis tick={{ fontSize: 10 }} />
+                <Tooltip />
+                <Line type="monotone" dataKey="rps" stroke="var(--secondary)" dot={false} name="RPS" />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* CPU Chart */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}>
+        <Card className="border-border/50 bg-card/50">
+          <CardHeader>
+            <CardTitle className="text-sm uppercase tracking-wider">CPU Usage (%)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <XAxis dataKey="t" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
+                <YAxis tick={{ fontSize: 10 }} domain={[0, 100]} />
+                <Tooltip />
+                <Line type="monotone" dataKey="cpu" stroke="var(--accent)" dot={false} name="CPU %" />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>

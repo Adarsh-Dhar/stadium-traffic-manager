@@ -38,6 +38,31 @@ const REDIS_URL        = process.env.REDIS_URL        || "redis://localhost:6379
 const DATABASE_URL     = process.env.DATABASE_URL     || "";
 const GAME_TYPE        = process.env.GAME_TYPE        || "regular_game";
 
+// ── Dynatrace direct query (mirrors what execute_dql MCP tool does) ────────
+const DT_CLUSTER = (process.env.DYNATRACE_CLUSTER_URL ?? '').replace(/\/$/, '');
+const DT_TOKEN   = process.env.DT_PLATFORM_TOKEN ?? process.env.DYNATRACE_API_TOKEN ?? '';
+
+async function queryDynatrace() {
+  if (!DT_CLUSTER || !DT_TOKEN) return null;
+  try {
+    const resp = await fetch(`${DT_CLUSTER}/platform/storage/query/v1/query:execute`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Api-Token ${DT_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query: `fetch metrics | filter metric.key == "fifa.ticketing.requests.per_sec" | limit 1`,
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!resp.ok) return null;
+    return await resp.json();
+  } catch {
+    return null;
+  }
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -225,6 +250,8 @@ async function gatherAllContext() {
     safeFetch("API server metrics",      fetchApiMetrics),
   ]);
 
+  const dtMetrics = await queryDynatrace();
+
   // ── Verification table ────────────────────────────────────────────────────
   const sources = [
     redisResult, baselineResult, weatherResult, transitResult,
@@ -250,6 +277,7 @@ async function gatherAllContext() {
     traffic:         trafficResult.ok  ? trafficResult.value  : null,
     apiMetrics:      apiResult.ok      ? apiResult.value.metrics : null,
     apiAlerts:       apiResult.ok      ? apiResult.value.alerts  : [],
+    dynatrace:       dtMetrics,
   };
 }
 
@@ -293,10 +321,8 @@ ${ctx.apiMetrics ? JSON.stringify(ctx.apiMetrics, null, 2) : "unavailable"}
 === [6b] OPEN ALERTS (unresolved) ===
 ${openAlerts.length ? JSON.stringify(openAlerts, null, 2) : "none"}
 
-=== [7] DYNATRACE (live — use MCP tools) ===
-Call get_problems to check for active incidents.
-Call execute_dql with query "fetch metrics | filter metric.key == \"builtin:service.requestCount.total\" | limit 1" to get live RPS.
-Call get_entities to confirm api-server service health.
+=== [7] DYNATRACE (live metrics) ===
+${ctx.dynatrace ? JSON.stringify(ctx.dynatrace, null, 2) : 'unavailable (DYNATRACE_ENV_ID not configured)'}
 
 === YOUR TASK ===
 Using ALL of the above signals together, respond ONLY with a valid JSON object (no markdown, no prose) matching this exact shape:

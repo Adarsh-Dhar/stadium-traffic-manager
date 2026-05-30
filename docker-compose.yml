@@ -79,5 +79,20 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  dashboard:
+    build:
+      context: ./artifacts/fifa-dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: "3000"
+      BASE_PATH: "/"
+      NODE_ENV: production
+    depends_on:
+      api-server:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgres-data:
