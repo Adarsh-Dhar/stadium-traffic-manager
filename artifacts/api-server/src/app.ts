@@ -8,7 +8,7 @@ import { register, collectDefaultMetrics, Counter } from 'prom-client';
 
 collectDefaultMetrics();
 
-export const httpRequestsTotal = new Counter({
+const httpRequestsTotal = new Counter({
   name: 'http_requests_total',
   help: 'Total HTTP requests',
   labelNames: ['method', 'route', 'status'],
@@ -16,7 +16,7 @@ export const httpRequestsTotal = new Counter({
 
 const app: Express = express();
 
-// Add this route BEFORE other middleware
+// Prometheus scrape endpoint — registered before pinoHttp to suppress per-scrape log noise
 app.get('/metrics', async (_req, res) => {
   res.set('Content-Type', register.contentType);
   res.end(await register.metrics());

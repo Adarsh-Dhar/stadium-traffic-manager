@@ -11,7 +11,7 @@ import {
   scaleServer,
   resetSystem,
   aiAnalyze,
-  startSimulation,
+  startSimulationWrapper as startSimulation,
   stopSimulation,
   getCurrentMetrics,
   getMetricsHistory,
@@ -81,22 +81,22 @@ router.post("/ticket/scan", async (req, res): Promise<void> => {
 });
 
 // GET /stadium/capacity
-router.get("/stadium/capacity", async (_req, res): Promise<void> => {
+router.get("/stadium/capacity", (_req, res): void => {
   res.json(getStadiumCapacity());
 });
 
 // GET /metrics/current
-router.get("/metrics/current", async (_req, res): Promise<void> => {
+router.get("/metrics/current", (_req, res): void => {
   res.json(getCurrentMetrics());
 });
 
 // GET /metrics/history
-router.get("/metrics/history", async (_req, res): Promise<void> => {
+router.get("/metrics/history", (_req, res): void => {
   res.json(getMetricsHistory());
 });
 
 // GET /metrics/alerts
-router.get("/metrics/alerts", async (_req, res): Promise<void> => {
+router.get("/metrics/alerts", (_req, res): void => {
   res.json(getAlerts());
 });
 
@@ -177,18 +177,18 @@ router.post("/simulation/start", async (req, res): Promise<void> => {
 });
 
 // POST /simulation/stop
-router.post("/simulation/stop", async (_req, res): Promise<void> => {
+router.post("/simulation/stop", (_req, res): void => {
   const status = stopSimulation();
   res.json({ ...status, elapsedSeconds: 0 });
 });
 
 // GET /simulation/status
-router.get("/simulation/status", async (_req, res): Promise<void> => {
+router.get("/simulation/status", (_req, res): void => {
   res.json(getSimulationStatus());
 });
 
 // GET /metrics/mcp-status
-router.get("/metrics/mcp-status", async (_req, res): Promise<void> => {
+router.get("/metrics/mcp-status", (_req, res): void => {
   res.json(getMcpStatus());
 });
 
@@ -209,7 +209,8 @@ router.get("/worldcup/matches", async (req, res): Promise<void> => {
       data = await getAllMatches();
     }
     res.json(data);
-  } catch (error) {
+  } catch (err) {
+    logger.error({ err }, "GET /worldcup/matches failed");
     res.status(500).json({ error: "Failed to fetch World Cup matches" });
   }
 });
@@ -219,7 +220,8 @@ router.get("/worldcup/upcoming", async (_req, res): Promise<void> => {
   try {
     const data = await getUpcomingMatches(10);
     res.json(data);
-  } catch (error) {
+  } catch (err) {
+    logger.error({ err }, "GET /worldcup/upcoming failed");
     res.status(500).json({ error: "Failed to fetch upcoming matches" });
   }
 });
@@ -229,7 +231,8 @@ router.get("/worldcup/live", async (_req, res): Promise<void> => {
   try {
     const data = await getLiveMatches();
     res.json(data);
-  } catch (error) {
+  } catch (err) {
+    logger.error({ err }, "GET /worldcup/live failed");
     res.status(500).json({ error: "Failed to fetch live matches" });
   }
 });
@@ -239,18 +242,15 @@ router.get("/worldcup/standings", async (_req, res): Promise<void> => {
   try {
     const data = await getStandings();
     res.json(data);
-  } catch (error) {
+  } catch (err) {
+    logger.error({ err }, "GET /worldcup/standings failed");
     res.status(500).json({ error: "Failed to fetch standings" });
   }
 });
 
 // GET /worldcup/tournament - Get tournament information
-router.get("/worldcup/tournament", async (_req, res): Promise<void> => {
-  try {
-    res.json(tournament);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch tournament info" });
-  }
+router.get("/worldcup/tournament", (_req, res): void => {
+  res.json(tournament);
 });
 
 // GET /worldcup/team/:id - Get team information
@@ -268,7 +268,8 @@ router.get("/worldcup/team/:id", async (req, res): Promise<void> => {
     );
     const team = teamMatches[0]?.homeTeam.id === teamId ? teamMatches[0].homeTeam : teamMatches[0]?.awayTeam;
     res.json(team || null);
-  } catch (error) {
+  } catch (err) {
+    logger.error({ err }, "GET /worldcup/team/:id failed");
     res.status(500).json({ error: "Failed to fetch team info" });
   }
 });
@@ -283,7 +284,8 @@ router.get("/worldcup/match/:id/stats", async (req, res): Promise<void> => {
     }
     const data = await getMatchById(fixtureId);
     res.json(data);
-  } catch (error) {
+  } catch (err) {
+    logger.error({ err }, "GET /worldcup/match/:id/stats failed");
     res.status(500).json({ error: "Failed to fetch match stats" });
   }
 });
@@ -294,7 +296,8 @@ router.get("/worldcup/group/:name", async (req, res): Promise<void> => {
     const groupName = req.params.name;
     const data = await getGroupStandings(groupName);
     res.json(data);
-  } catch (error) {
+  } catch (err) {
+    logger.error({ err }, "GET /worldcup/group/:name failed");
     res.status(500).json({ error: "Failed to fetch group standings" });
   }
 });
@@ -305,7 +308,8 @@ router.get("/worldcup/bracket", async (_req, res): Promise<void> => {
     const allMatches = await getAllMatches();
     const knockoutMatches = allMatches.matches.filter((m: any) => m.stage !== 'GROUP_STAGE');
     res.json({ matches: knockoutMatches });
-  } catch (error) {
+  } catch (err) {
+    logger.error({ err }, "GET /worldcup/bracket failed");
     res.status(500).json({ error: "Failed to fetch bracket" });
   }
 });
