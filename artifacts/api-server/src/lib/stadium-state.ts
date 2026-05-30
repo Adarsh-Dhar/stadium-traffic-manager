@@ -3,6 +3,9 @@ import { logger } from "./logger.js";
 import { pushMetrics, pushEvent } from "./dynatrace.js";
 import { db, pool, tickets, requestLog, metricsSnapshots } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
+import Redis from 'ioredis';
+
+const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379');
 
 // ── Types (unchanged) ──────────────────────────────────────────────────────
 export interface SystemMetrics {
@@ -339,6 +342,7 @@ export async function scanTicket(ticketId: string, gate: string): Promise<{ succ
   await db.update(tickets).set({ used: true, gate, scannedAt: Date.now() }).where(eq(tickets.id, ticketId));
   state.totalEntered++;
   state.gateEntries.set(gate, (state.gateEntries.get(gate) ?? 0) + 1);
+  await redis.incr('tickets_scanned');
   return { success: true, totalEntered: state.totalEntered };
 }
 
@@ -358,6 +362,7 @@ export async function resetSystem(): Promise<void> {
   await Promise.all([
     db.execute(sql`TRUNCATE TABLE request_log`),
     db.update(tickets).set({ used: false, gate: null, scannedAt: null }),
+    redis.set('tickets_scanned', '0'),
   ]).catch((err) => logger.warn({ err }, "resetSystem DB error"));
 
   state = { requestCount: 0, avgLatency: 50, cpuUsage: 20, memoryUsage: 30, activeServers: 1, errorRate: 0, totalRequests: 0, requestsPerSecond: 0, lastRequestTime: Date.now(), gateEntries: new Map(), totalEntered: 0 };
