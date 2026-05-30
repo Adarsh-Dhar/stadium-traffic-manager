@@ -27,7 +27,7 @@ const DRY_RUN      = (process.env.AI_AGENT_DRY_RUN   || "false") === "true";
 
 // Gemini — uses the current stable generateContent endpoint
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GENERATIVE_API_KEY || process.env.GOOGLE_API_KEY || "";
-const GEMINI_MODEL   = process.env.GEMINI_MODEL   || "gemini-2.0-flash";
+const GEMINI_MODEL   = process.env.GEMINI_MODEL   || "gemini-2.5-flash";
 const GEMINI_URL     = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
 // External APIs
@@ -407,18 +407,7 @@ async function callGemini(promptText) {
 
   const body = {
     contents: [{ role: "user", parts: [{ text: promptText }] }],
-    generationConfig: { temperature: 0.15, maxOutputTokens: 2048 },
-    extensions: [{
-      name: "dynatrace",
-      mcpServer: {
-        command: "npx",
-        args: ["-y", "@dynatrace-oss/dynatrace-mcp-server@latest"],
-        env: {
-          DT_ENVIRONMENT: process.env.DYNATRACE_CLUSTER_URL,
-          DT_PLATFORM_TOKEN: process.env.DYNATRACE_API_TOKEN,
-        }
-      }
-    }]
+    generationConfig: { temperature: 0.15, maxOutputTokens: 2048 }
   };
 
   for (let attempt = 1; attempt <= GEMINI_MAX_RETRIES; attempt++) {
