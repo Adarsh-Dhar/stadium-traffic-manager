@@ -1,7 +1,5 @@
 import fetch from "node-fetch";
-
-const API_BASE = process.env.AI_AGENT_API_BASE || `http://localhost:${process.env.PORT || 5000}/api/fifa`;
-const DRY_RUN = (process.env.AI_AGENT_DRY_RUN || "false") === "true";
+import { API_BASE, DRY_RUN } from "./config.js";
 
 async function post(path, body = {}) {
   const url = `${API_BASE}${path}`;
@@ -31,9 +29,9 @@ export async function executeAction(action) {
     case "remove-server":
       return post("/admin/scale", { action: "remove-server" });
     case "clear-cache":
-      return post("/admin/reset", {});
+      return post("/admin/reset", { scope: "cache" });
     case "restart-service":
-      return post("/admin/reset", {});
+      return post("/admin/reset", { scope: "service" });
     case "ai-analyze":
       return post("/admin/ai-analyze", {});
     default:

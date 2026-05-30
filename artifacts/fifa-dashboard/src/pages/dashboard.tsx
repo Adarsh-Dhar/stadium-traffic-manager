@@ -31,8 +31,8 @@ export default function Dashboard() {
   const tournamentQuery = useGetWorldCupTournament();
 
   // Use generated hooks for metrics
-  const metricsQuery = useGetCurrentMetrics();
-  const mcpQuery = useGetMcpStatus();
+  const metricsQuery = useGetCurrentMetrics({ query: { refetchInterval: 5000 } });
+  const mcpQuery = useGetMcpStatus({ query: { refetchInterval: 5000 } });
 
   const upcomingMatches = upcomingQuery.data?.matches || [];
   const liveMatches = liveQuery.data?.matches || [];

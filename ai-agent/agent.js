@@ -14,16 +14,12 @@
  * the RPS for the NEXT interval, then optionally acts on the recommendation.
  */
 
-import dotenv from "dotenv";
 import fetch from "node-fetch";
 import actions from "./actions.js";
-
-dotenv.config();
+import { API_BASE, DRY_RUN } from "./config.js";
 
 // ── Config ──────────────────────────────────────────────────────────────────
-const API_BASE     = process.env.AI_AGENT_API_BASE    || `http://localhost:${process.env.PORT || 5000}/api/fifa`;
-const INTERVAL     = Number(process.env.AGENT_CHECK_INTERVAL || 15_000);
-const DRY_RUN      = (process.env.AI_AGENT_DRY_RUN   || "false") === "true";
+const INTERVAL = Number(process.env.AGENT_CHECK_INTERVAL || 15_000);
 
 // Gemini — uses the current stable generateContent endpoint
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GENERATIVE_API_KEY || process.env.GOOGLE_API_KEY || "";
@@ -61,9 +57,9 @@ async function fetchRedisTickets() {
   const url = new URL(REDIS_URL);
   const host = url.hostname || "localhost";
   const port = parseInt(url.port) || 6379;
+  const net = await import("net").then(m => m.default || m);
 
-  return new Promise(async (resolve, reject) => {
-    const net = await import("net").then(m => m.default || m);
+  return new Promise((resolve, reject) => {
     const client = new net.Socket();
     let buf = "";
     const timeout = setTimeout(() => { client.destroy(); reject(new Error("Redis timeout")); }, 3000);
@@ -202,7 +198,7 @@ async function fetchTraffic() {
 }
 
 
-// ── [7] API Server — system metrics + alerts ─────────────────────────────────
+// ── [6] API Server — system metrics + alerts ─────────────────────────────────
 async function fetchApiMetrics() {
   const [mRes, aRes] = await Promise.all([
     fetch(`${API_BASE}/metrics/current`, { signal: AbortSignal.timeout(5000) }).then(r => r.json()),
@@ -356,6 +352,14 @@ function _rpdSlots() {
   return GEMINI_RPD_LIMIT - _rpdCount;
 }
 
+function msUntilMidnightPT() {
+  const now = new Date();
+  const midnight = new Date(now);
+  midnight.setUTCHours(7, 0, 0, 0);          // midnight PT = 07:00 UTC (PST)
+  if (midnight <= now) midnight.setUTCDate(midnight.getUTCDate() + 1);
+  return midnight - now;
+}
+
 function _recordRequest() {
   _rpmWindow.push(Date.now());
   _rpdCount++;
@@ -370,15 +374,9 @@ async function _waitForCapacity() {
 
     if (rpdSlots <= 0) {
       // Daily quota exhausted — nothing we can do until midnight Pacific.
-      const msUntilMidnight = (() => {
-        const now = new Date();
-        const midnight = new Date(now);
-        midnight.setUTCHours(7, 0, 0, 0);          // midnight PT = 07:00 UTC (PST)
-        if (midnight <= now) midnight.setUTCDate(midnight.getUTCDate() + 1);
-        return midnight - now;
-      })();
-      const hh = Math.floor(msUntilMidnight / 3_600_000);
-      const mm = Math.floor((msUntilMidnight % 3_600_000) / 60_000);
+      const ms = msUntilMidnightPT();
+      const hh = Math.floor(ms / 3_600_000);
+      const mm = Math.floor((ms % 3_600_000) / 60_000);
       console.warn(`[gemini] ⛔ Daily quota exhausted (${_rpdCount}/${GEMINI_RPD_LIMIT} RPD). Next reset in ${hh}h ${mm}m. Skipping this cycle.`);
       throw new Error("GEMINI_RPD_EXHAUSTED");
     }
@@ -396,6 +394,13 @@ async function _waitForCapacity() {
     console.log(`[gemini] quota: ${_rpmSlots()} RPM slots, ${_rpdSlots()} RPD slots remaining`);
     return;
   }
+}
+
+// ── Backoff helper ────────────────────────────────────────────────────────────
+function computeBackoff(attempt, serverWaitMs = null) {
+  const base   = serverWaitMs ?? Math.min(60_000 * attempt, 600_000);
+  const jitter = Math.floor(Math.random() * 5_000);
+  return base + jitter;
 }
 
 // ── Call Gemini ───────────────────────────────────────────────────────────────
@@ -427,11 +432,8 @@ async function callGemini(promptText) {
         // A 429 means our local counter drifted (e.g. another process, or
         // Gemini returned a 429 before we expected it).  Back off with
         // exponential delay + jitter, then re-check local capacity.
-        const retryAfterHeader = resp.headers.get("retry-after");
-        const serverWait = retryAfterHeader ? Number(retryAfterHeader) * 1000 : null;
-        const backoff = serverWait ?? Math.min(60_000 * attempt, 600_000); // cap at 10 min
-        const jitter  = Math.floor(Math.random() * 5_000);
-        const wait    = backoff + jitter;
+        const serverWait = resp.headers.get("retry-after");
+        const wait = computeBackoff(attempt, serverWait ? Number(serverWait) * 1000 : null);
         console.warn(`[gemini] 429 rate-limited (attempt ${attempt}/${GEMINI_MAX_RETRIES}). Backing off ${Math.round(wait / 1000)}s …`);
         if (attempt < GEMINI_MAX_RETRIES) {
           await sleep(wait);
@@ -445,9 +447,7 @@ async function callGemini(promptText) {
         const txt = await resp.text().catch(() => "<no body>");
         console.warn(`[gemini] HTTP ${resp.status}: ${txt.slice(0, 200)}`);
         if ([502, 503, 504].includes(resp.status) && attempt < GEMINI_MAX_RETRIES) {
-          const backoff = Math.min(60_000 * attempt, 600_000); // cap at 10 min
-          const jitter = Math.floor(Math.random() * 5_000);
-          const wait = backoff + jitter;
+          const wait = computeBackoff(attempt);
           console.warn(`[gemini] ${resp.status} unavailable (attempt ${attempt}/${GEMINI_MAX_RETRIES}). Backing off ${Math.round(wait / 1000)}s …`);
           await sleep(wait);
           continue;
@@ -477,36 +477,28 @@ async function callGemini(promptText) {
 }
 
 // ── Parse model output ────────────────────────────────────────────────────────
+function repairTruncatedJson(raw) {
+  const match = raw.match(/\{[\s\S]*/);
+  if (!match) return null;
+  let s = match[0];
+  if ((s.match(/"/g) || []).length % 2 !== 0) s += '"';   // close open string
+  let open = 0;
+  for (const c of s) { if (c === '{') open++; else if (c === '}') open--; }
+  if (open > 0) s += '}'.repeat(open);
+  return s;
+}
+
 function parseModelOutput(raw) {
   if (!raw) return null;
-  try { return JSON.parse(raw); } catch (_) {}
-  // Try to extract JSON from markdown code blocks
-  const codeBlockMatch = raw.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-  if (codeBlockMatch) {
-    try { return JSON.parse(codeBlockMatch[1]); } catch (_) {}
-  }
-  // Try to find JSON object in the text
-  const match = raw.match(/\{[\s\S]*\}/);
-  if (match) { try { return JSON.parse(match[0]); } catch (_) {} }
-  // Handle truncated JSON: try to close incomplete objects and strings
-  const truncatedMatch = raw.match(/\{[\s\S]*/);
-  if (truncatedMatch) {
-    let truncated = truncatedMatch[0];
-    // Check if the last quote is unclosed (truncated string)
-    const quotes = (truncated.match(/"/g) || []).length;
-    if (quotes % 2 !== 0) {
-      truncated += '"'; // Close the truncated string
-    }
-    // Count braces and add missing closing braces
-    let openBraces = 0;
-    for (const char of truncated) {
-      if (char === '{') openBraces++;
-      else if (char === '}') openBraces--;
-    }
-    if (openBraces > 0) {
-      truncated += '}'.repeat(openBraces);
-    }
-    try { return JSON.parse(truncated); } catch (_) {}
+  const candidates = [
+    raw,
+    raw.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)?.[1],
+    raw.match(/\{[\s\S]*\}/)?.[0],
+    repairTruncatedJson(raw),
+  ];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    try { return JSON.parse(candidate); } catch (_) {}
   }
   return null;
 }
