@@ -407,7 +407,7 @@ async function callGemini(promptText) {
 
   const body = {
     contents: [{ role: "user", parts: [{ text: promptText }] }],
-    generationConfig: { temperature: 0.15, maxOutputTokens: 2048 }
+    generationConfig: { temperature: 0.15, maxOutputTokens: 1024, responseMimeType: "application/json" }
   };
 
   for (let attempt = 1; attempt <= GEMINI_MAX_RETRIES; attempt++) {
