@@ -22,7 +22,12 @@ import type {
 import type {
   AiAnalysisResult,
   Alert,
+  GetWorldCupMatchesParams,
+  GetWorldCupUpcomingParams,
+  GroupResponse,
   HealthStatus,
+  Match,
+  MatchList,
   McpBridgeStatus,
   MetricsSnapshot,
   OverloadError,
@@ -34,9 +39,12 @@ import type {
   SimulationConfig,
   SimulationStatus,
   StadiumCapacity,
+  StandingsResponse,
   SystemMetrics,
+  Team,
   TicketInput,
-  TicketValidationResult
+  TicketValidationResult,
+  TournamentInfo
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -1073,6 +1081,713 @@ export function useGetMcpStatus<TData = Awaited<ReturnType<typeof getMcpStatus>>
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetMcpStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetWorldCupMatchesUrl = (params?: GetWorldCupMatchesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/worldcup/matches?${stringifiedParams}` : `/api/worldcup/matches`
+}
+
+/**
+ * @summary Get World Cup matches
+ */
+export const getWorldCupMatches = async (params?: GetWorldCupMatchesParams, options?: RequestInit): Promise<MatchList> => {
+
+  return customFetch<MatchList>(getGetWorldCupMatchesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWorldCupMatchesQueryKey = (params?: GetWorldCupMatchesParams,) => {
+    return [
+    `/api/worldcup/matches`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetWorldCupMatchesQueryOptions = <TData = Awaited<ReturnType<typeof getWorldCupMatches>>, TError = ErrorType<unknown>>(params?: GetWorldCupMatchesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorldCupMatches>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWorldCupMatchesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWorldCupMatches>>> = ({ signal }) => getWorldCupMatches(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWorldCupMatches>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWorldCupMatchesQueryResult = NonNullable<Awaited<ReturnType<typeof getWorldCupMatches>>>
+export type GetWorldCupMatchesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get World Cup matches
+ */
+
+export function useGetWorldCupMatches<TData = Awaited<ReturnType<typeof getWorldCupMatches>>, TError = ErrorType<unknown>>(
+ params?: GetWorldCupMatchesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorldCupMatches>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWorldCupMatchesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetWorldCupUpcomingUrl = (params?: GetWorldCupUpcomingParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/worldcup/upcoming?${stringifiedParams}` : `/api/worldcup/upcoming`
+}
+
+/**
+ * @summary Get upcoming World Cup matches
+ */
+export const getWorldCupUpcoming = async (params?: GetWorldCupUpcomingParams, options?: RequestInit): Promise<MatchList> => {
+
+  return customFetch<MatchList>(getGetWorldCupUpcomingUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWorldCupUpcomingQueryKey = (params?: GetWorldCupUpcomingParams,) => {
+    return [
+    `/api/worldcup/upcoming`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetWorldCupUpcomingQueryOptions = <TData = Awaited<ReturnType<typeof getWorldCupUpcoming>>, TError = ErrorType<unknown>>(params?: GetWorldCupUpcomingParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorldCupUpcoming>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWorldCupUpcomingQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWorldCupUpcoming>>> = ({ signal }) => getWorldCupUpcoming(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWorldCupUpcoming>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWorldCupUpcomingQueryResult = NonNullable<Awaited<ReturnType<typeof getWorldCupUpcoming>>>
+export type GetWorldCupUpcomingQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get upcoming World Cup matches
+ */
+
+export function useGetWorldCupUpcoming<TData = Awaited<ReturnType<typeof getWorldCupUpcoming>>, TError = ErrorType<unknown>>(
+ params?: GetWorldCupUpcomingParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorldCupUpcoming>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWorldCupUpcomingQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetWorldCupLiveUrl = () => {
+
+
+
+
+  return `/api/worldcup/live`
+}
+
+/**
+ * @summary Get live World Cup matches
+ */
+export const getWorldCupLive = async ( options?: RequestInit): Promise<MatchList> => {
+
+  return customFetch<MatchList>(getGetWorldCupLiveUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWorldCupLiveQueryKey = () => {
+    return [
+    `/api/worldcup/live`
+    ] as const;
+    }
+
+
+export const getGetWorldCupLiveQueryOptions = <TData = Awaited<ReturnType<typeof getWorldCupLive>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorldCupLive>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWorldCupLiveQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWorldCupLive>>> = ({ signal }) => getWorldCupLive({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWorldCupLive>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWorldCupLiveQueryResult = NonNullable<Awaited<ReturnType<typeof getWorldCupLive>>>
+export type GetWorldCupLiveQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get live World Cup matches
+ */
+
+export function useGetWorldCupLive<TData = Awaited<ReturnType<typeof getWorldCupLive>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorldCupLive>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWorldCupLiveQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetWorldCupStandingsUrl = () => {
+
+
+
+
+  return `/api/worldcup/standings`
+}
+
+/**
+ * @summary Get World Cup standings
+ */
+export const getWorldCupStandings = async ( options?: RequestInit): Promise<StandingsResponse> => {
+
+  return customFetch<StandingsResponse>(getGetWorldCupStandingsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWorldCupStandingsQueryKey = () => {
+    return [
+    `/api/worldcup/standings`
+    ] as const;
+    }
+
+
+export const getGetWorldCupStandingsQueryOptions = <TData = Awaited<ReturnType<typeof getWorldCupStandings>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorldCupStandings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWorldCupStandingsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWorldCupStandings>>> = ({ signal }) => getWorldCupStandings({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWorldCupStandings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWorldCupStandingsQueryResult = NonNullable<Awaited<ReturnType<typeof getWorldCupStandings>>>
+export type GetWorldCupStandingsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get World Cup standings
+ */
+
+export function useGetWorldCupStandings<TData = Awaited<ReturnType<typeof getWorldCupStandings>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorldCupStandings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWorldCupStandingsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetWorldCupTournamentUrl = () => {
+
+
+
+
+  return `/api/worldcup/tournament`
+}
+
+/**
+ * @summary Get tournament information
+ */
+export const getWorldCupTournament = async ( options?: RequestInit): Promise<TournamentInfo> => {
+
+  return customFetch<TournamentInfo>(getGetWorldCupTournamentUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWorldCupTournamentQueryKey = () => {
+    return [
+    `/api/worldcup/tournament`
+    ] as const;
+    }
+
+
+export const getGetWorldCupTournamentQueryOptions = <TData = Awaited<ReturnType<typeof getWorldCupTournament>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorldCupTournament>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWorldCupTournamentQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWorldCupTournament>>> = ({ signal }) => getWorldCupTournament({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWorldCupTournament>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWorldCupTournamentQueryResult = NonNullable<Awaited<ReturnType<typeof getWorldCupTournament>>>
+export type GetWorldCupTournamentQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get tournament information
+ */
+
+export function useGetWorldCupTournament<TData = Awaited<ReturnType<typeof getWorldCupTournament>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorldCupTournament>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWorldCupTournamentQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetWorldCupTeamUrl = (id: number,) => {
+
+
+
+
+  return `/api/worldcup/team/${id}`
+}
+
+/**
+ * @summary Get team information
+ */
+export const getWorldCupTeam = async (id: number, options?: RequestInit): Promise<Team> => {
+
+  return customFetch<Team>(getGetWorldCupTeamUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWorldCupTeamQueryKey = (id: number,) => {
+    return [
+    `/api/worldcup/team/${id}`
+    ] as const;
+    }
+
+
+export const getGetWorldCupTeamQueryOptions = <TData = Awaited<ReturnType<typeof getWorldCupTeam>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorldCupTeam>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWorldCupTeamQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWorldCupTeam>>> = ({ signal }) => getWorldCupTeam(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWorldCupTeam>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWorldCupTeamQueryResult = NonNullable<Awaited<ReturnType<typeof getWorldCupTeam>>>
+export type GetWorldCupTeamQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get team information
+ */
+
+export function useGetWorldCupTeam<TData = Awaited<ReturnType<typeof getWorldCupTeam>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorldCupTeam>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWorldCupTeamQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetWorldCupMatchStatsUrl = (id: number,) => {
+
+
+
+
+  return `/api/worldcup/match/${id}/stats`
+}
+
+/**
+ * @summary Get match statistics
+ */
+export const getWorldCupMatchStats = async (id: number, options?: RequestInit): Promise<Match> => {
+
+  return customFetch<Match>(getGetWorldCupMatchStatsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWorldCupMatchStatsQueryKey = (id: number,) => {
+    return [
+    `/api/worldcup/match/${id}/stats`
+    ] as const;
+    }
+
+
+export const getGetWorldCupMatchStatsQueryOptions = <TData = Awaited<ReturnType<typeof getWorldCupMatchStats>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorldCupMatchStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWorldCupMatchStatsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWorldCupMatchStats>>> = ({ signal }) => getWorldCupMatchStats(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWorldCupMatchStats>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWorldCupMatchStatsQueryResult = NonNullable<Awaited<ReturnType<typeof getWorldCupMatchStats>>>
+export type GetWorldCupMatchStatsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get match statistics
+ */
+
+export function useGetWorldCupMatchStats<TData = Awaited<ReturnType<typeof getWorldCupMatchStats>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorldCupMatchStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWorldCupMatchStatsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetWorldCupGroupUrl = (name: string,) => {
+
+
+
+
+  return `/api/worldcup/group/${name}`
+}
+
+/**
+ * @summary Get group standings and matches
+ */
+export const getWorldCupGroup = async (name: string, options?: RequestInit): Promise<GroupResponse> => {
+
+  return customFetch<GroupResponse>(getGetWorldCupGroupUrl(name),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWorldCupGroupQueryKey = (name: string,) => {
+    return [
+    `/api/worldcup/group/${name}`
+    ] as const;
+    }
+
+
+export const getGetWorldCupGroupQueryOptions = <TData = Awaited<ReturnType<typeof getWorldCupGroup>>, TError = ErrorType<unknown>>(name: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorldCupGroup>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWorldCupGroupQueryKey(name);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWorldCupGroup>>> = ({ signal }) => getWorldCupGroup(name, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(name), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWorldCupGroup>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWorldCupGroupQueryResult = NonNullable<Awaited<ReturnType<typeof getWorldCupGroup>>>
+export type GetWorldCupGroupQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get group standings and matches
+ */
+
+export function useGetWorldCupGroup<TData = Awaited<ReturnType<typeof getWorldCupGroup>>, TError = ErrorType<unknown>>(
+ name: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorldCupGroup>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWorldCupGroupQueryOptions(name,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetWorldCupBracketUrl = () => {
+
+
+
+
+  return `/api/worldcup/bracket`
+}
+
+/**
+ * @summary Get knockout stage bracket
+ */
+export const getWorldCupBracket = async ( options?: RequestInit): Promise<MatchList> => {
+
+  return customFetch<MatchList>(getGetWorldCupBracketUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWorldCupBracketQueryKey = () => {
+    return [
+    `/api/worldcup/bracket`
+    ] as const;
+    }
+
+
+export const getGetWorldCupBracketQueryOptions = <TData = Awaited<ReturnType<typeof getWorldCupBracket>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorldCupBracket>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWorldCupBracketQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWorldCupBracket>>> = ({ signal }) => getWorldCupBracket({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWorldCupBracket>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWorldCupBracketQueryResult = NonNullable<Awaited<ReturnType<typeof getWorldCupBracket>>>
+export type GetWorldCupBracketQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get knockout stage bracket
+ */
+
+export function useGetWorldCupBracket<TData = Awaited<ReturnType<typeof getWorldCupBracket>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorldCupBracket>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWorldCupBracketQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

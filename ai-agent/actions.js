@@ -1,7 +1,7 @@
 import fetch from "node-fetch";
 
 const API_BASE = process.env.AI_AGENT_API_BASE || `http://localhost:${process.env.PORT || 5000}/api/fifa`;
-const DRY_RUN = (process.env.AI_AGENT_DRY_RUN || "true") === "true";
+const DRY_RUN = (process.env.AI_AGENT_DRY_RUN || "false") === "true";
 
 async function post(path, body = {}) {
   const url = `${API_BASE}${path}`;

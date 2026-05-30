@@ -7,12 +7,12 @@
  *   Redis INCR          → updates tickets_scanned counter the AI agent reads
  *
  * Usage:
- *   node ticket-scanner.js [--match GRP|R32|QF|SF|F] [--speed 1] [--api http://localhost:3000]
+ *   node ticket-scanner.js [--match GRP|R32|QF|SF|F] [--speed 1] [--api http://localhost:5000]
  *
  * Options:
  *   --match   Match stage; controls target fill rate  (default: GRP)
  *   --speed   Time multiplier (1 = real-time, 60 = 1 sim-minute per real-second)
- *   --api     API server base URL                     (default: http://localhost:3000)
+ *   --api     API server base URL                     (default: http://localhost:5000)
  *   --redis   Redis connection string                 (default: redis://localhost:6379)
  *   --dry-run Print scans without hitting the API
  */
@@ -27,7 +27,7 @@ const { values: args } = parseArgs({
   options: {
     match:   { type: 'string',  default: 'GRP' },
     speed:   { type: 'string',  default: '1'   },
-    api:     { type: 'string',  default: 'http://localhost:3000' },
+    api:     { type: 'string',  default: 'http://localhost:5000' },
     redis:   { type: 'string',  default: 'redis://localhost:6379' },
     'dry-run': { type: 'boolean', default: false },
   },
@@ -239,13 +239,13 @@ async function performScan(ticketId, gate, isDuplicate, isInvalid) {
     stats.totalDuplicate++;
     stats.totalRejected++;
     try {
-      await apiPost('/ticket/scan', { ticketId, gate: gate.id });
+      await apiPost('/api/fifa/ticket/scan', { ticketId, gate: gate.id });
     } catch {}
     return;
   }
 
   try {
-    const res = await apiPost('/ticket/scan', { ticketId, gate: gate.id });
+    const res = await apiPost('/api/fifa/ticket/scan', { ticketId, gate: gate.id });
     if (res.status === 200 && res.body?.success) {
       recordScan(gate.id);
       scanned.add(ticketId);

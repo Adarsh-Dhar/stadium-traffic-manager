@@ -246,3 +246,312 @@ export const GetMcpStatusResponse = zod.object({
 })
 
 
+/**
+ * @summary Get World Cup matches
+ */
+export const GetWorldCupMatchesQueryParams = zod.object({
+  "status": zod.enum(['live', 'upcoming', 'finished']).optional()
+})
+
+export const GetWorldCupMatchesResponse = zod.object({
+  "matches": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "homeTeam": zod.object({
+  "id": zod.number().optional(),
+  "name": zod.string().optional(),
+  "crest": zod.string().optional()
+}).optional(),
+  "awayTeam": zod.object({
+  "id": zod.number().optional(),
+  "name": zod.string().optional(),
+  "crest": zod.string().optional()
+}).optional(),
+  "utcDate": zod.coerce.date().optional(),
+  "status": zod.enum(['SCHEDULED', 'LIVE', 'FINISHED']).optional(),
+  "stage": zod.string().optional(),
+  "group": zod.string().optional(),
+  "score": zod.object({
+  "fullTime": zod.object({
+  "home": zod.number().nullish(),
+  "away": zod.number().nullish()
+}).optional(),
+  "halfTime": zod.object({
+  "home": zod.number().nullish(),
+  "away": zod.number().nullish()
+}).optional(),
+  "winner": zod.string().nullish()
+}).optional(),
+  "venue": zod.string().optional()
+})).optional()
+})
+
+
+/**
+ * @summary Get upcoming World Cup matches
+ */
+export const getWorldCupUpcomingQueryLimitDefault = 10;
+
+export const GetWorldCupUpcomingQueryParams = zod.object({
+  "limit": zod.coerce.number().default(getWorldCupUpcomingQueryLimitDefault)
+})
+
+export const GetWorldCupUpcomingResponse = zod.object({
+  "matches": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "homeTeam": zod.object({
+  "id": zod.number().optional(),
+  "name": zod.string().optional(),
+  "crest": zod.string().optional()
+}).optional(),
+  "awayTeam": zod.object({
+  "id": zod.number().optional(),
+  "name": zod.string().optional(),
+  "crest": zod.string().optional()
+}).optional(),
+  "utcDate": zod.coerce.date().optional(),
+  "status": zod.enum(['SCHEDULED', 'LIVE', 'FINISHED']).optional(),
+  "stage": zod.string().optional(),
+  "group": zod.string().optional(),
+  "score": zod.object({
+  "fullTime": zod.object({
+  "home": zod.number().nullish(),
+  "away": zod.number().nullish()
+}).optional(),
+  "halfTime": zod.object({
+  "home": zod.number().nullish(),
+  "away": zod.number().nullish()
+}).optional(),
+  "winner": zod.string().nullish()
+}).optional(),
+  "venue": zod.string().optional()
+})).optional()
+})
+
+
+/**
+ * @summary Get live World Cup matches
+ */
+export const GetWorldCupLiveResponse = zod.object({
+  "matches": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "homeTeam": zod.object({
+  "id": zod.number().optional(),
+  "name": zod.string().optional(),
+  "crest": zod.string().optional()
+}).optional(),
+  "awayTeam": zod.object({
+  "id": zod.number().optional(),
+  "name": zod.string().optional(),
+  "crest": zod.string().optional()
+}).optional(),
+  "utcDate": zod.coerce.date().optional(),
+  "status": zod.enum(['SCHEDULED', 'LIVE', 'FINISHED']).optional(),
+  "stage": zod.string().optional(),
+  "group": zod.string().optional(),
+  "score": zod.object({
+  "fullTime": zod.object({
+  "home": zod.number().nullish(),
+  "away": zod.number().nullish()
+}).optional(),
+  "halfTime": zod.object({
+  "home": zod.number().nullish(),
+  "away": zod.number().nullish()
+}).optional(),
+  "winner": zod.string().nullish()
+}).optional(),
+  "venue": zod.string().optional()
+})).optional()
+})
+
+
+/**
+ * @summary Get World Cup standings
+ */
+export const GetWorldCupStandingsResponse = zod.object({
+  "standings": zod.array(zod.object({
+  "name": zod.string().optional(),
+  "table": zod.array(zod.object({
+  "position": zod.number().optional(),
+  "team": zod.object({
+  "id": zod.number().optional(),
+  "name": zod.string().optional(),
+  "crest": zod.string().optional()
+}).optional(),
+  "points": zod.number().optional(),
+  "goalsFor": zod.number().optional(),
+  "goalsAgainst": zod.number().optional(),
+  "goalDifference": zod.number().optional(),
+  "played": zod.number().optional(),
+  "won": zod.number().optional(),
+  "drawn": zod.number().optional(),
+  "lost": zod.number().optional()
+})).optional()
+})).optional()
+})
+
+
+/**
+ * @summary Get tournament information
+ */
+export const GetWorldCupTournamentResponse = zod.object({
+  "id": zod.number().optional(),
+  "name": zod.string().optional(),
+  "emblem": zod.string().optional(),
+  "area": zod.object({
+  "name": zod.string().optional()
+}).optional(),
+  "currentSeason": zod.object({
+  "startDate": zod.string().optional(),
+  "endDate": zod.string().optional(),
+  "currentMatchday": zod.number().optional()
+}).optional()
+})
+
+
+/**
+ * @summary Get team information
+ */
+export const GetWorldCupTeamParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetWorldCupTeamResponse = zod.object({
+  "id": zod.number().optional(),
+  "name": zod.string().optional(),
+  "crest": zod.string().optional()
+})
+
+
+/**
+ * @summary Get match statistics
+ */
+export const GetWorldCupMatchStatsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetWorldCupMatchStatsResponse = zod.object({
+  "id": zod.number().optional(),
+  "homeTeam": zod.object({
+  "id": zod.number().optional(),
+  "name": zod.string().optional(),
+  "crest": zod.string().optional()
+}).optional(),
+  "awayTeam": zod.object({
+  "id": zod.number().optional(),
+  "name": zod.string().optional(),
+  "crest": zod.string().optional()
+}).optional(),
+  "utcDate": zod.coerce.date().optional(),
+  "status": zod.enum(['SCHEDULED', 'LIVE', 'FINISHED']).optional(),
+  "stage": zod.string().optional(),
+  "group": zod.string().optional(),
+  "score": zod.object({
+  "fullTime": zod.object({
+  "home": zod.number().nullish(),
+  "away": zod.number().nullish()
+}).optional(),
+  "halfTime": zod.object({
+  "home": zod.number().nullish(),
+  "away": zod.number().nullish()
+}).optional(),
+  "winner": zod.string().nullish()
+}).optional(),
+  "venue": zod.string().optional()
+})
+
+
+/**
+ * @summary Get group standings and matches
+ */
+export const GetWorldCupGroupParams = zod.object({
+  "name": zod.coerce.string()
+})
+
+export const GetWorldCupGroupResponse = zod.object({
+  "group": zod.object({
+  "name": zod.string().optional(),
+  "table": zod.array(zod.object({
+  "position": zod.number().optional(),
+  "team": zod.object({
+  "id": zod.number().optional(),
+  "name": zod.string().optional(),
+  "crest": zod.string().optional()
+}).optional(),
+  "points": zod.number().optional(),
+  "goalsFor": zod.number().optional(),
+  "goalsAgainst": zod.number().optional(),
+  "goalDifference": zod.number().optional(),
+  "played": zod.number().optional(),
+  "won": zod.number().optional(),
+  "drawn": zod.number().optional(),
+  "lost": zod.number().optional()
+})).optional()
+}).optional(),
+  "matches": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "homeTeam": zod.object({
+  "id": zod.number().optional(),
+  "name": zod.string().optional(),
+  "crest": zod.string().optional()
+}).optional(),
+  "awayTeam": zod.object({
+  "id": zod.number().optional(),
+  "name": zod.string().optional(),
+  "crest": zod.string().optional()
+}).optional(),
+  "utcDate": zod.coerce.date().optional(),
+  "status": zod.enum(['SCHEDULED', 'LIVE', 'FINISHED']).optional(),
+  "stage": zod.string().optional(),
+  "group": zod.string().optional(),
+  "score": zod.object({
+  "fullTime": zod.object({
+  "home": zod.number().nullish(),
+  "away": zod.number().nullish()
+}).optional(),
+  "halfTime": zod.object({
+  "home": zod.number().nullish(),
+  "away": zod.number().nullish()
+}).optional(),
+  "winner": zod.string().nullish()
+}).optional(),
+  "venue": zod.string().optional()
+})).optional()
+})
+
+
+/**
+ * @summary Get knockout stage bracket
+ */
+export const GetWorldCupBracketResponse = zod.object({
+  "matches": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "homeTeam": zod.object({
+  "id": zod.number().optional(),
+  "name": zod.string().optional(),
+  "crest": zod.string().optional()
+}).optional(),
+  "awayTeam": zod.object({
+  "id": zod.number().optional(),
+  "name": zod.string().optional(),
+  "crest": zod.string().optional()
+}).optional(),
+  "utcDate": zod.coerce.date().optional(),
+  "status": zod.enum(['SCHEDULED', 'LIVE', 'FINISHED']).optional(),
+  "stage": zod.string().optional(),
+  "group": zod.string().optional(),
+  "score": zod.object({
+  "fullTime": zod.object({
+  "home": zod.number().nullish(),
+  "away": zod.number().nullish()
+}).optional(),
+  "halfTime": zod.object({
+  "home": zod.number().nullish(),
+  "away": zod.number().nullish()
+}).optional(),
+  "winner": zod.string().nullish()
+}).optional(),
+  "venue": zod.string().optional()
+})).optional()
+})
+
+

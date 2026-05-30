@@ -20,6 +20,8 @@ tags:
     description: Admin and scaling operations
   - name: simulation
     description: Load simulation controls
+  - name: worldcup
+    description: FIFA World Cup 2026 data
 paths:
   /healthz:
     get:
@@ -243,6 +245,153 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/McpBridgeStatus"
+
+  /worldcup/matches:
+    get:
+      operationId: getWorldCupMatches
+      tags: [worldcup]
+      summary: Get World Cup matches
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [live, upcoming, finished]
+      responses:
+        "200":
+          description: World Cup matches
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MatchList"
+
+  /worldcup/upcoming:
+    get:
+      operationId: getWorldCupUpcoming
+      tags: [worldcup]
+      summary: Get upcoming World Cup matches
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: Upcoming matches
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MatchList"
+
+  /worldcup/live:
+    get:
+      operationId: getWorldCupLive
+      tags: [worldcup]
+      summary: Get live World Cup matches
+      responses:
+        "200":
+          description: Live matches
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MatchList"
+
+  /worldcup/standings:
+    get:
+      operationId: getWorldCupStandings
+      tags: [worldcup]
+      summary: Get World Cup standings
+      responses:
+        "200":
+          description: Tournament standings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandingsResponse"
+
+  /worldcup/tournament:
+    get:
+      operationId: getWorldCupTournament
+      tags: [worldcup]
+      summary: Get tournament information
+      responses:
+        "200":
+          description: Tournament info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentInfo"
+
+  /worldcup/team/{id}:
+    get:
+      operationId: getWorldCupTeam
+      tags: [worldcup]
+      summary: Get team information
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Team info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+
+  /worldcup/match/{id}/stats:
+    get:
+      operationId: getWorldCupMatchStats
+      tags: [worldcup]
+      summary: Get match statistics
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Match stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Match"
+
+  /worldcup/group/{name}:
+    get:
+      operationId: getWorldCupGroup
+      tags: [worldcup]
+      summary: Get group standings and matches
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Group data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupResponse"
+
+  /worldcup/bracket:
+    get:
+      operationId: getWorldCupBracket
+      tags: [worldcup]
+      summary: Get knockout stage bracket
+      responses:
+        "200":
+          description: Bracket matches
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MatchList"
 
 components:
   schemas:
@@ -504,3 +653,164 @@ components:
           type: string
         metrics:
           $ref: "#/components/schemas/SystemMetrics"
+
+    Match:
+      type: object
+      properties:
+        id:
+          type: integer
+        homeTeam:
+          type: object
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+            crest:
+              type: string
+        awayTeam:
+          type: object
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+            crest:
+              type: string
+        utcDate:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [SCHEDULED, LIVE, FINISHED]
+        stage:
+          type: string
+        group:
+          type: string
+        score:
+          type: object
+          properties:
+            fullTime:
+              type: object
+              properties:
+                home:
+                  type: integer
+                  nullable: true
+                away:
+                  type: integer
+                  nullable: true
+            halfTime:
+              type: object
+              properties:
+                home:
+                  type: integer
+                  nullable: true
+                away:
+                  type: integer
+                  nullable: true
+            winner:
+              type: string
+              nullable: true
+        venue:
+          type: string
+
+    MatchList:
+      type: object
+      properties:
+        matches:
+          type: array
+          items:
+            $ref: "#/components/schemas/Match"
+
+    GroupTeam:
+      type: object
+      properties:
+        position:
+          type: integer
+        team:
+          type: object
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+            crest:
+              type: string
+        points:
+          type: integer
+        goalsFor:
+          type: integer
+        goalsAgainst:
+          type: integer
+        goalDifference:
+          type: integer
+        played:
+          type: integer
+        won:
+          type: integer
+        drawn:
+          type: integer
+        lost:
+          type: integer
+
+    Group:
+      type: object
+      properties:
+        name:
+          type: string
+        table:
+          type: array
+          items:
+            $ref: "#/components/schemas/GroupTeam"
+
+    StandingsResponse:
+      type: object
+      properties:
+        standings:
+          type: array
+          items:
+            $ref: "#/components/schemas/Group"
+
+    TournamentInfo:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        emblem:
+          type: string
+        area:
+          type: object
+          properties:
+            name:
+              type: string
+        currentSeason:
+          type: object
+          properties:
+            startDate:
+              type: string
+            endDate:
+              type: string
+            currentMatchday:
+              type: integer
+
+    Team:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        crest:
+          type: string
+
+    GroupResponse:
+      type: object
+      properties:
+        group:
+          $ref: "#/components/schemas/Group"
+        matches:
+          type: array
+          items:
+            $ref: "#/components/schemas/Match"

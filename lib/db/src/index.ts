@@ -18,7 +18,7 @@ if (process.env.DATABASE_URL) {
     connectionTimeoutMillis: 8_000,  // allow a bit more time when pool is busy
   });
 
-  pool.on("error", (err) => {
+  pool.on("error", (err: Error) => {
     console.error("[pg pool] unexpected error", err.message);
   });
 

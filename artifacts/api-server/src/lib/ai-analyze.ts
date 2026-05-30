@@ -19,7 +19,7 @@ export async function aiAnalyze(): Promise<{
 
   const apiKey = process.env.GEMINI_API_KEY || process.env.GENERATIVE_API_KEY || process.env.GOOGLE_API_KEY;
   const apiUrl = process.env.GEMINI_API_URL ||
-    "https://us-models.googleapis.com/v1/models/gemini-2.5-flash:generateText";
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`;
 
   async function callModel(promptText: string): Promise<string> {
     const maxAttempts = 2;
@@ -31,12 +31,11 @@ export async function aiAnalyze(): Promise<{
         if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
 
         const body = JSON.stringify({
-          prompt: { text: promptText },
-          temperature: 0.2,
-          maxOutputTokens: 512,
+          contents: [{ role: "user", parts: [{ text: promptText }] }],
+          generationConfig: { temperature: 0.2, maxOutputTokens: 512 },
         });
 
-        const url = apiKey && !headers["Authorization"] ? `${apiUrl}?key=${apiKey}` : apiUrl;
+        const url = `${apiUrl}?key=${apiKey}`;
         const resp = await fetch(url, { method: "POST", headers, body, signal: controller.signal as any });
         clearTimeout(timeout);
         if (!resp.ok) {

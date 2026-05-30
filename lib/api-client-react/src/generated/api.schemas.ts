@@ -189,3 +189,130 @@ export interface OverloadError {
   metrics?: SystemMetrics;
 }
 
+export type MatchHomeTeam = {
+  id?: number;
+  name?: string;
+  crest?: string;
+};
+
+export type MatchAwayTeam = {
+  id?: number;
+  name?: string;
+  crest?: string;
+};
+
+export type MatchStatus = typeof MatchStatus[keyof typeof MatchStatus];
+
+
+export const MatchStatus = {
+  SCHEDULED: 'SCHEDULED',
+  LIVE: 'LIVE',
+  FINISHED: 'FINISHED',
+} as const;
+
+export type MatchScoreFullTime = {
+  home?: number | null;
+  away?: number | null;
+};
+
+export type MatchScoreHalfTime = {
+  home?: number | null;
+  away?: number | null;
+};
+
+export type MatchScore = {
+  fullTime?: MatchScoreFullTime;
+  halfTime?: MatchScoreHalfTime;
+  winner?: string | null;
+};
+
+export interface Match {
+  id?: number;
+  homeTeam?: MatchHomeTeam;
+  awayTeam?: MatchAwayTeam;
+  utcDate?: string;
+  status?: MatchStatus;
+  stage?: string;
+  group?: string;
+  score?: MatchScore;
+  venue?: string;
+}
+
+export interface MatchList {
+  matches?: Match[];
+}
+
+export type GroupTeamTeam = {
+  id?: number;
+  name?: string;
+  crest?: string;
+};
+
+export interface GroupTeam {
+  position?: number;
+  team?: GroupTeamTeam;
+  points?: number;
+  goalsFor?: number;
+  goalsAgainst?: number;
+  goalDifference?: number;
+  played?: number;
+  won?: number;
+  drawn?: number;
+  lost?: number;
+}
+
+export interface Group {
+  name?: string;
+  table?: GroupTeam[];
+}
+
+export interface StandingsResponse {
+  standings?: Group[];
+}
+
+export type TournamentInfoArea = {
+  name?: string;
+};
+
+export type TournamentInfoCurrentSeason = {
+  startDate?: string;
+  endDate?: string;
+  currentMatchday?: number;
+};
+
+export interface TournamentInfo {
+  id?: number;
+  name?: string;
+  emblem?: string;
+  area?: TournamentInfoArea;
+  currentSeason?: TournamentInfoCurrentSeason;
+}
+
+export interface Team {
+  id?: number;
+  name?: string;
+  crest?: string;
+}
+
+export interface GroupResponse {
+  group?: Group;
+  matches?: Match[];
+}
+
+export type GetWorldCupMatchesParams = {
+status?: GetWorldCupMatchesStatus;
+};
+
+export type GetWorldCupMatchesStatus = typeof GetWorldCupMatchesStatus[keyof typeof GetWorldCupMatchesStatus];
+
+
+export const GetWorldCupMatchesStatus = {
+  live: 'live',
+  upcoming: 'upcoming',
+  finished: 'finished',
+} as const;
+
+export type GetWorldCupUpcomingParams = {
+limit?: number;
+};
+

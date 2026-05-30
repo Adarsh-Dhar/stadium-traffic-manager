@@ -375,7 +375,6 @@ export async function resetSystem(): Promise<void> {
 }
 
 export function getMcpStatus() {
-  const poolStats = pool as any;
   return {
     connected: true,
     serverUrl: "npx @dynatrace-oss/dynatrace-mcp-server@latest",
@@ -383,8 +382,6 @@ export function getMcpStatus() {
     lastPing: mcpLastPing, eventsForwarded: mcpEventsForwarded,
     dynatraceEnvId: process.env["DYNATRACE_ENV_ID"] ?? null,
     status: process.env["DYNATRACE_ENV_ID"] ? "connected" : "simulated",
-    // NEW — exposes pool health in the MCP status endpoint
-    pgPool: { total: poolStats.totalCount ?? 0, idle: poolStats.idleCount ?? 0, waiting: poolStats.waitingCount ?? 0 },
   } as const;
 }
 
