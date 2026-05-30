@@ -58,14 +58,9 @@ console.log(`✅ Session pool: ${sessionMemoryMB.toFixed(0)}MB (${SESSION_POOL_S
 
 // Response cache — simulates caching without cleanup (memory leak!)
 const responseCache = new Map();
-let cacheMemoryUsage = 0;
 
 // Message queue — simulates in-memory message processing
 const messageQueue = [];
-let queueMemoryUsage = 0;
-
-// Real latency tracking (not a memory leak, but adds data)
-const detailedLatencies = [];
 
 // ─── STATE ────────────────────────────────────────────────────────────────
 let sent        = 0;
@@ -85,21 +80,14 @@ let startingMemoryMB = 0;
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────
 function getMemoryUsageMB() {
-  if (typeof process !== 'undefined' && process.memoryUsage) {
-    const mem = process.memoryUsage();
-    // heapUsed = currently used JavaScript heap
-    // heapTotal = total allocated heap
-    // external = C++ objects bound to JS objects
-    // rss = resident set size (actual physical memory used)
-    return {
-      heapUsed: mem.heapUsed / 1024 / 1024,
-      heapTotal: mem.heapTotal / 1024 / 1024,
-      external: mem.external / 1024 / 1024,
-      rss: mem.rss / 1024 / 1024,
-      arrayBuffers: mem.arrayBuffers ? mem.arrayBuffers / 1024 / 1024 : 0,
-    };
-  }
-  return { heapUsed: 0, heapTotal: 0, external: 0, rss: 0 };
+  const mem = process.memoryUsage();
+  return {
+    heapUsed:     mem.heapUsed     / 1024 / 1024,
+    heapTotal:    mem.heapTotal    / 1024 / 1024,
+    external:     mem.external     / 1024 / 1024,
+    rss:          mem.rss          / 1024 / 1024,
+    arrayBuffers: (mem.arrayBuffers ?? 0) / 1024 / 1024,
+  };
 }
 
 function ticketId(n) {
@@ -129,8 +117,8 @@ function percentile(arr, p) {
 }
 
 // Simulate QR validation + memory-intensive work
-function simulateQRValidation(ticketId) {
-  let hash = ticketId;
+function simulateQRValidation(tid) {
+  let hash = tid;
   for (let i = 0; i < 50; i++) {
     hash = createHash("sha256").update(hash).digest("hex");
   }
@@ -140,18 +128,17 @@ function simulateQRValidation(ticketId) {
   session.writeUInt32LE(Date.now() & 0xffffffff, 0);
   
   // Simulate response caching (memory leak!)
-  const cacheKey = `response_${ticketId}_${Date.now()}`;
+  const cacheKey = `response_${tid}_${Date.now()}`;
   const cachedResponse = {
-    ticketId,
+    ticketId: tid,
     hash,
     timestamp: Date.now(),
     data: Buffer.alloc(16384), // 16KB fake response
-    metadata: { fan: ticketId, processed: true }
+    metadata: { fan: tid, processed: true }
   };
   
   if (responseCache.size < MAX_MEMORY_CACHE_SIZE) {
     responseCache.set(cacheKey, cachedResponse);
-    cacheMemoryUsage += 16384;
   }
   
   // Queue message for processing (simulates message broker backlog)
@@ -162,7 +149,6 @@ function simulateQRValidation(ticketId) {
       createdAt: Date.now(),
       largePayload: Buffer.alloc(8192)
     });
-    queueMemoryUsage += 8192;
   }
   
   return hash;
@@ -217,8 +203,8 @@ async function printMetrics() {
   console.log(`║  RSS (Actual Mem) : ${color(mem.rss.toFixed(0), 1000, 2000)} MB  ⚠️  WATCH THIS!`);
   console.log(`║  External Buffers : ${mem.external.toFixed(0)} MB  (Session pools)`);
   console.log(`║  Peak Reached     : ${peakMemoryMB.toFixed(0)} MB`);
-  console.log(`║  Response Cache   : ${(cacheMemoryUsage / (1024*1024)).toFixed(1)} MB  (leak: ${responseCache.size} entries)`);
-  console.log(`║  Message Queue    : ${(queueMemoryUsage / (1024*1024)).toFixed(1)} MB  (backlog: ${messageQueue.length} msgs)`);
+  console.log(`║  Response Cache   : ${(responseCache.size * 16384 / (1024*1024)).toFixed(1)} MB  (leak: ${responseCache.size} entries)`);
+  console.log(`║  Message Queue    : ${(messageQueue.length * 8192 / (1024*1024)).toFixed(1)} MB  (backlog: ${messageQueue.length} msgs)`);
   console.log("╚──────────────────────────────────────────────────────────────────────╝");
 
   console.log("");
@@ -256,7 +242,6 @@ async function sendOne(n) {
 
     const ms = Date.now() - t0;
     latencies.push(ms);
-    detailedLatencies.push({ ticketId: ticketId(n), ms, timestamp: Date.now() });
     
     if (latencies.length > 5000) latencies.shift();
 
@@ -379,8 +364,8 @@ async function main() {
   console.log(`   Peak Reached  : ${color(peakMemoryMB.toFixed(0), 1000, 2000)}MB`);
   console.log(`   Final Heap    : ${finalMem.heapUsed.toFixed(0)}MB / ${finalMem.heapTotal.toFixed(0)}MB`);
   console.log(`   Final RSS     : ${color(finalMem.rss.toFixed(0), 1000, 2000)}MB (actual physical memory)`);
-  console.log(`   Memory Leaked : ${(cacheMemoryUsage / (1024*1024)).toFixed(1)}MB (response cache)`);
-  console.log(`   Queue Backlog : ${(queueMemoryUsage / (1024*1024)).toFixed(1)}MB (${messageQueue.length} messages)`);
+  console.log(`   Memory Leaked : ${(responseCache.size * 16384 / (1024*1024)).toFixed(1)}MB (response cache)`);
+  console.log(`   Queue Backlog : ${(messageQueue.length * 8192 / (1024*1024)).toFixed(1)}MB (${messageQueue.length} messages)`);
   console.log(`   Memory Growth : ${(peakMemoryMB - startingMemoryMB).toFixed(0)}MB increase`);
   console.log("");
 

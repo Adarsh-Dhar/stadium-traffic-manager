@@ -76,16 +76,12 @@ class APITester {
     });
   }
 
-  async assert(condition, message) {
-    if (!condition) {
-      throw new Error(`Assertion failed: ${message}`);
-    }
+  assert(condition, message) {
+    if (!condition) throw new Error(`Assertion failed: ${message}`);
   }
 
-  async assertEqual(actual, expected, message) {
-    if (actual !== expected) {
-      throw new Error(`Expected ${expected}, got ${actual}. ${message}`);
-    }
+  assertEqual(actual, expected, message) {
+    if (actual !== expected) throw new Error(`Expected ${expected}, got ${actual}. ${message}`);
   }
 
   log(message) {
@@ -150,7 +146,7 @@ class APITester {
     return new Promise((resolve, reject) => {
       const apiServerPath = path.join(__dirname, '../artifacts/api-server');
 
-      this.apiProcess = spawn('node', ['--enable-source-maps', './dist/index.mjs'], {
+      this.apiProcess = spawn('node', ['-r', './load-env.cjs', '--enable-source-maps', './dist/index.mjs'], {
         cwd: apiServerPath,
         stdio: ['ignore', 'pipe', 'pipe'],
         env: {

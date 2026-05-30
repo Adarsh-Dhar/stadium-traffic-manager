@@ -23,6 +23,7 @@ export const options = {
 };
 
 const API_BASE = __ENV.API_BASE || 'http://localhost:5000/api/fifa';
+const JSON_HEADERS = { headers: { 'Content-Type': 'application/json' } };
 
 export default function () {
   fifa_active_vus.add(__VU);
@@ -34,13 +35,13 @@ export default function () {
   if (r.status !== 200) { fifa_errors.add(1); }
 
   // 2) POST /ticket/validate
-  r = http.post(`${API_BASE}/ticket/validate`, JSON.stringify({ ticketId: `T-${__VU}-${__ITER}` }), { headers: { 'Content-Type': 'application/json' } });
+  r = http.post(`${API_BASE}/ticket/validate`, JSON.stringify({ ticketId: `T-${__VU}-${__ITER}` }), JSON_HEADERS);
   fifa_response_time.add(r.timings.duration);
   if (r.status === 503) fifa_overloaded_503.add(1);
   if (r.status !== 200) { fifa_errors.add(1); }
 
   // 3) POST /ticket/scan
-  r = http.post(`${API_BASE}/ticket/scan`, JSON.stringify({ gate: 'G1', ticketId: `T-${__VU}-${__ITER}` }), { headers: { 'Content-Type': 'application/json' } });
+  r = http.post(`${API_BASE}/ticket/scan`, JSON.stringify({ gate: 'G1', ticketId: `T-${__VU}-${__ITER}` }), JSON_HEADERS);
   fifa_response_time.add(r.timings.duration);
   if (r.status === 503) fifa_overloaded_503.add(1);
   if (r.status !== 200) { fifa_errors.add(1); }
@@ -49,28 +50,29 @@ export default function () {
 }
 
 export function handleSummary(data) {
+  function m(key, field) { return data.metrics[key]?.values?.[field]; }
+
   const summary = {
-    vus: data.metrics.vus ? data.metrics.vus.count : undefined,
-    http_reqs: data.metrics.http_reqs ? data.metrics.http_reqs.total : undefined,
-    throughput: data.metrics.http_reqs ? (data.metrics.http_reqs.mean ? data.metrics.http_reqs.mean : undefined) : undefined,
-    p95: data.metrics.http_req_duration ? data.metrics.http_req_duration['p(95)'] : undefined,
-    p99: data.metrics.http_req_duration ? data.metrics.http_req_duration['p(99)'] : undefined,
-    errors: data.metrics.fifa_errors ? data.metrics.fifa_errors.total : 0,
-    overload_503: data.metrics.fifa_overloaded_503 ? data.metrics.fifa_overloaded_503.total : 0
+    vus:          m('vus',                'value'),
+    http_reqs:    m('http_reqs',          'count'),
+    throughput:   m('http_reqs',          'rate'),   // req/s — was wrongly .mean
+    p95:          m('http_req_duration',  'p(95)'),
+    p99:          m('http_req_duration',  'p(99)'),
+    errors:       m('fifa_errors',        'count') ?? 0,
+    overload_503: m('fifa_overloaded_503','count') ?? 0,
   };
 
   const out = JSON.stringify(summary, null, 2);
   console.log('\n=== Demo Surge Results ===');
   console.log('Total requests:', summary.http_reqs);
-  console.log('Throughput (approx):', summary.throughput);
+  console.log('Throughput (req/s):', summary.throughput);
   console.log('P95(ms):', summary.p95);
   console.log('P99(ms):', summary.p99);
   console.log('Error count:', summary.errors);
   console.log('503 count:', summary.overload_503);
 
-  // Return files to write and stdout content — k6 will write the file when handleSummary returns a mapping
   return {
     stdout: out,
-    'load-testing/demo-surge-results.json': out
+    'load-testing/demo-surge-results.json': out,
   };
 }

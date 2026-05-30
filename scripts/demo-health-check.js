@@ -1,48 +1,40 @@
 #!/usr/bin/env node
 // scripts/demo-health-check.js — pre-demo preflight checker
 
-(async () => {
-  let fs, child_process, net, path, util;
-  if (typeof require !== 'undefined') {
-    fs = require('fs');
-    child_process = require('child_process');
-    net = require('net');
-    path = require('path');
-    util = require('util');
-  } else {
-    const fsMod = await import('fs'); fs = fsMod.default || fsMod;
-    child_process = (await import('child_process')).default || (await import('child_process'));
-    net = (await import('net')).default || (await import('net'));
-    path = (await import('path')).default || (await import('path'));
-    util = (await import('util')).default || (await import('util'));
-  }
+import fs from 'fs';
+import net from 'net';
+import path from 'path';
+import { exec as execCb } from 'child_process';
+import { promisify } from 'util';
 
-  const exec = util.promisify(child_process.exec);
-  function ok(s) { return `\u2705 ${s}`; } // ✅
-  function warn(s) { return `\u26A0\uFE0F ${s}`; } // ⚠️
-  function fail(s) { return `\u274C ${s}`; } // ❌
+const exec = promisify(execCb);
 
-  function nodeOk() {
-    const ver = process.version.replace(/^v/, '');
-    const major = Number(ver.split('.')[0]);
-    return { ver, ok: major >= 18 };
-  }
+function ok(s) { return `\u2705 ${s}`; } // ✅
+function warn(s) { return `\u26A0\uFE0F ${s}`; } // ⚠️
+function fail(s) { return `\u274C ${s}`; } // ❌
 
-  async function commandExists(cmd) {
-    try { await exec(`${cmd} --version`); return true; } catch (e) { return false; }
-  }
+function nodeOk() {
+  const ver = process.version.replace(/^v/, '');
+  const major = Number(ver.split('.')[0]);
+  return { ver, ok: major >= 18 };
+}
 
-  async function portFree(port) {
-    return new Promise(resolve => {
-      const server = net.createServer();
-      server.once('error', () => { resolve(false); });
-      server.once('listening', () => { server.close(); resolve(true); });
-      server.listen(port, '127.0.0.1');
-    });
-  }
+async function commandExists(cmd) {
+  try { await exec(`${cmd} --version`); return true; } catch (e) { return false; }
+}
 
-  function fileExists(p) { try { return fs.existsSync(p); } catch (e) { return false; } }
+async function portFree(port) {
+  return new Promise(resolve => {
+    const server = net.createServer();
+    server.once('error', () => { resolve(false); });
+    server.once('listening', () => { server.close(); resolve(true); });
+    server.listen(port, '127.0.0.1');
+  });
+}
 
+const fileExists = (p) => fs.existsSync(p);
+
+async function main() {
   const checks = [];
   const root = process.cwd();
 
@@ -112,5 +104,6 @@
   }
   console.log('\nNo hard blockers detected. Warnings shown as ⚠️. Ready to proceed.');
   process.exit(0);
+}
 
-})();
+main();
