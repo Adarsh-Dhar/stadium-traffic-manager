@@ -21,32 +21,28 @@ const MATCH_SCENARIOS = [
     name: "Group Stage",
     emoji: "⚽",
     desc: "Calm pre-match atmosphere, steady crowd arrival",
-    color: "bg-success/20 text-success border-success/30",
-    icon: "🥇"
+    color: "bg-success/20 text-success border-success/30"
   },
   {
     id: "medium",
     name: "Knockout Round",
     emoji: "⚡",
     desc: "Intense competition, moderate crowd energy",
-    color: "bg-primary/20 text-primary border-primary/30",
-    icon: "🥈"
+    color: "bg-primary/20 text-primary border-primary/30"
   },
   {
     id: "high",
     name: "Semi-Finals",
     emoji: "🔥",
     desc: "Peak excitement, high-volume crowd surge",
-    color: "bg-warning/20 text-warning border-warning/30",
-    icon: "🏆"
+    color: "bg-warning/20 text-warning border-warning/30"
   },
   {
     id: "surge",
     name: "Championship Match",
     emoji: "💥",
     desc: "Maximum tension, 80,000 fans erupting",
-    color: "bg-destructive/20 text-destructive border-destructive/30",
-    icon: "👑"
+    color: "bg-destructive/20 text-destructive border-destructive/30"
   },
 ];
 
@@ -54,7 +50,7 @@ export default function Simulation() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const { data: status } = useGetSimulationStatus({ query: { refetchInterval: 2000 } });
+  const { data: status } = useGetSimulationStatus();
   const startSim = useStartSimulation();
   const stopSim = useStopSimulation();
 
@@ -103,7 +99,7 @@ export default function Simulation() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <Card className="bg-gradient-to-r from-card via-card to-secondary/10 border-border shadow-lg">
+        <Card className="bg-linear-to-r from-card via-card to-secondary/10 border-border shadow-lg">
           <CardHeader className="border-b border-border/50">
             <CardTitle className="text-sm font-semibold uppercase tracking-wider flex items-center gap-2">
               <Zap className="h-4 w-4 text-accent" />
@@ -186,10 +182,7 @@ export default function Simulation() {
               >
                 <CardContent className="p-6">
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="text-4xl">{scenario.emoji}</div>
-                      <div className="text-2xl">{scenario.icon}</div>
-                    </div>
+                    <div className="text-4xl">{scenario.emoji}</div>
                     <div>
                       <h4 className="text-sm font-bold uppercase tracking-wider text-foreground">{scenario.name}</h4>
                       <p className="text-xs text-muted-foreground mt-1">{scenario.desc}</p>
@@ -216,14 +209,14 @@ export default function Simulation() {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="p-4 rounded-lg border border-border/30 bg-muted/5">
-              <div className="text-sm font-semibold text-muted-foreground uppercase mb-2">Peak Capacity</div>
-              <div className="text-2xl font-bold text-primary">{status?.peakLoad || "0"}%</div>
-              <p className="text-xs text-muted-foreground mt-1">Maximum system load during simulation</p>
+              <div className="text-sm font-semibold text-muted-foreground uppercase mb-2">Current Stage</div>
+              <div className="text-2xl font-bold text-primary">{status?.stage || "—"}</div>
+              <p className="text-xs text-muted-foreground mt-1">Current simulation stage</p>
             </div>
             <div className="p-4 rounded-lg border border-border/30 bg-muted/5">
-              <div className="text-sm font-semibold text-muted-foreground uppercase mb-2">Avg Response Time</div>
-              <div className="text-2xl font-bold text-accent">{status?.avgLatency || "0"}ms</div>
-              <p className="text-xs text-muted-foreground mt-1">Average system response time</p>
+              <div className="text-sm font-semibold text-muted-foreground uppercase mb-2">Elapsed Time</div>
+              <div className="text-2xl font-bold text-accent">{status?.elapsedSeconds || 0}s</div>
+              <p className="text-xs text-muted-foreground mt-1">Time elapsed in simulation</p>
             </div>
           </div>
           <div className="p-4 rounded-lg border border-primary/30 bg-primary/5">

@@ -1,12 +1,24 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { useGetCurrentMetrics } from "@workspace/api-client-react";
+import { useGetCurrentMetrics, useGetStadiumCapacity, useGetMetricsHistory } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TrendingUp, Activity, Award } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 export default function Metrics() {
-  const { data: currentMetrics } = useGetCurrentMetrics({ query: { refetchInterval: 2000 } });
+  const { data: currentMetrics } = useGetCurrentMetrics();
+  const { data: capacity } = useGetStadiumCapacity();
+  const { data: history } = useGetMetricsHistory();
+
+  const chartData = (history || []).map((s) => ({
+    t: new Date(s.timestamp).toLocaleTimeString(),
+    avg: s.avgLatency,
+    p95: s.p95Latency,
+    p99: s.p99Latency,
+    rps: s.requestsPerSecond,
+    cpu: s.cpuUsage,
+  }));
 
   const tournamentStats = {
     totalMatches: 64,
@@ -33,8 +45,8 @@ export default function Metrics() {
     },
     {
       label: "Avg Stadium Fill",
-      value: `${Math.round((currentMetrics?.cpuUsage || 0))}%`,
-      percentage: currentMetrics?.cpuUsage || 0,
+      value: `${Math.round(capacity?.occupancyPercent || 0)}%`,
+      percentage: capacity?.occupancyPercent || 0,
       icon: Award,
       color: "text-secondary"
     },
@@ -48,7 +60,7 @@ export default function Metrics() {
   ];
 
   return (
-    <div className="flex flex-col gap-6 w-full max-w-[1600px] mx-auto pb-10">
+    <div className="flex flex-col gap-6 w-full max-w-400 mx-auto pb-10">
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
         <div className="flex justify-between items-end">
@@ -101,7 +113,7 @@ export default function Metrics() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.4 }}
       >
-        <Card className="border-border/50 bg-gradient-to-r from-card via-card to-secondary/10">
+        <Card className="border-border/50 bg-linear-to-r from-card via-card to-secondary/10">
           <CardHeader>
             <CardTitle className="text-base uppercase tracking-wider">Tournament Summary</CardTitle>
           </CardHeader>
@@ -183,7 +195,7 @@ export default function Metrics() {
                   <span className="text-lg font-bold text-primary">{Math.round(currentMetrics?.cpuUsage || 0)}%</span>
                 </div>
                 <div className="w-full h-2 bg-card rounded-full overflow-hidden border border-border/30">
-                  <div className="w-[45%] h-full bg-primary"></div>
+                  <div className="h-full bg-primary transition-all duration-500" style={{ width: `${Math.min(currentMetrics?.cpuUsage || 0, 100)}%` }} />
                 </div>
               </div>
               <div className="space-y-3">
@@ -192,7 +204,7 @@ export default function Metrics() {
                   <span className="text-lg font-bold text-secondary">{Math.round(currentMetrics?.memoryUsage || 0)}%</span>
                 </div>
                 <div className="w-full h-2 bg-card rounded-full overflow-hidden border border-border/30">
-                  <div className="w-[52%] h-full bg-secondary"></div>
+                  <div className="h-full bg-secondary transition-all duration-500" style={{ width: `${Math.min(currentMetrics?.memoryUsage || 0, 100)}%` }} />
                 </div>
               </div>
               <div className="space-y-3">
@@ -201,13 +213,39 @@ export default function Metrics() {
                   <span className="text-lg font-bold text-success">{(currentMetrics?.errorRate || 0).toFixed(2)}%</span>
                 </div>
                 <div className="w-full h-2 bg-card rounded-full overflow-hidden border border-border/30">
-                  <div className="w-[8%] h-full bg-success"></div>
+                  <div className="h-full bg-success transition-all duration-500" style={{ width: `${Math.min((currentMetrics?.errorRate || 0) * 10, 100)}%` }} />
                 </div>
               </div>
             </CardContent>
           </Card>
         </motion.div>
       </div>
+
+      {/* Latency Chart */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.5 }}
+      >
+        <Card className="border-border/50 bg-card/50">
+          <CardHeader>
+            <CardTitle className="text-sm uppercase tracking-wider">Latency (ms)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <XAxis dataKey="t" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
+                <YAxis tick={{ fontSize: 10 }} />
+                <Tooltip />
+                <Line type="monotone" dataKey="avg" stroke="var(--primary)" dot={false} name="Avg" />
+                <Line type="monotone" dataKey="p95" stroke="var(--accent)" dot={false} name="p95" />
+                <Line type="monotone" dataKey="p99" stroke="var(--destructive)" dot={false} name="p99" />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </motion.div>
     </div>
   );
 }

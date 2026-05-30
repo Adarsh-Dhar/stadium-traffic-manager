@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Trophy, Zap, Users, TrendingUp, Target, Clock, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { motion } from "framer-motion";
+import { Trophy, Zap, Clock, AlertCircle, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,7 @@ import {
   useGetWorldCupTournament,
   useGetCurrentMetrics,
   useGetMcpStatus,
+  useAiAnalyze,
 } from "@workspace/api-client-react";
 import type { Match, GroupTeam, TournamentInfo } from "@workspace/api-client-react";
 
@@ -22,7 +23,6 @@ import type { Match, GroupTeam, TournamentInfo } from "@workspace/api-client-rea
 export default function Dashboard() {
   const { toast } = useToast();
   const [aiResult, setAiResult] = useState<any | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
 
   // Use generated hooks for worldcup data
   const upcomingQuery = useGetWorldCupUpcoming({ limit: 10 });
@@ -46,29 +46,20 @@ export default function Dashboard() {
   };
 
 
-  const handleAiAnalyze = async () => {
-    setAiLoading(true);
-    try {
-      const API_BASE = import.meta.env.VITE_API_URL || "/api";
-      const res = await fetch(`${API_BASE}/admin/ai-analyze`, { method: "POST" });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "unknown" }));
-        toast({ title: "AI Analyze failed", description: err.error || "Unknown error", variant: "destructive" });
-        setAiLoading(false);
-        return;
-      }
-      const data = await res.json();
-      setAiResult(data);
-      toast({ title: "AI Analysis Complete", description: data.analysis?.slice(0, 120) ?? "Analysis ready" });
-      // Refresh metrics queries after action
-      metricsQuery.refetch();
-      mcpQuery.refetch();
-    } catch (err) {
-      console.error(err);
-      toast({ title: "AI Analyze error", description: "Failed to run AI analysis", variant: "destructive" });
-    } finally {
-      setAiLoading(false);
-    }
+  const aiAnalyzeMutation = useAiAnalyze();
+
+  const handleAiAnalyze = () => {
+    aiAnalyzeMutation.mutate(undefined, {
+      onSuccess: (data) => {
+        setAiResult(data);
+        toast({ title: "AI Analysis Complete", description: data.analysis?.slice(0, 120) ?? "Analysis ready" });
+        metricsQuery.refetch();
+        mcpQuery.refetch();
+      },
+      onError: (err) => {
+        toast({ title: "AI Analyze failed", description: err.message || "Unknown error", variant: "destructive" });
+      },
+    });
   };
 
   return (
@@ -134,9 +125,9 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-3">
-                <Button onClick={handleAiAnalyze} disabled={aiLoading}>
+                <Button onClick={handleAiAnalyze} disabled={aiAnalyzeMutation.isPending}>
                   <Zap className="h-4 w-4" />
-                  {aiLoading ? "Analyzing…" : "Analyze with AI"}
+                  {aiAnalyzeMutation.isPending ? "Analyzing…" : "Analyze with AI"}
                 </Button>
                 <Badge>{aiResult ? (aiResult.serversAdded > 0 ? "Scaled" : "Analyzed") : "Idle"}</Badge>
               </div>

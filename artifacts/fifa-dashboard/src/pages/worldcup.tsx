@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { Trophy, MapPin, Calendar, Users, Flag, Loader2 } from "lucide-react";
+import { Trophy, MapPin, Users, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import {
   useGetWorldCupBracket,
 } from "@workspace/api-client-react";
 import type { Match, Group } from "@workspace/api-client-react";
+import { cn } from "@/lib/utils";
 
 interface Venue {
   id: number;
@@ -19,7 +20,25 @@ interface Venue {
   country: string;
   capacity: number;
 }
-import { cn } from "@/lib/utils";
+
+const VENUES = [
+  { id: 1, name: "MetLife Stadium", city: "East Rutherford", country: "USA", capacity: 82500 },
+  { id: 2, name: "AT&T Stadium", city: "Arlington", country: "USA", capacity: 80000 },
+  { id: 3, name: "SoFi Stadium", city: "Inglewood", country: "USA", capacity: 70000 },
+  { id: 4, name: "Lumen Field", city: "Seattle", country: "USA", capacity: 68000 },
+  { id: 5, name: "Arrowhead Stadium", city: "Kansas City", country: "USA", capacity: 76000 },
+  { id: 6, name: "Hard Rock Stadium", city: "Miami Gardens", country: "USA", capacity: 65000 },
+  { id: 7, name: "NRG Stadium", city: "Houston", country: "USA", capacity: 72000 },
+  { id: 8, name: "Lincoln Financial Field", city: "Philadelphia", country: "USA", capacity: 69000 },
+  { id: 9, name: "Levi's Stadium", city: "Santa Clara", country: "USA", capacity: 68000 },
+  { id: 10, name: "Bank of America Stadium", city: "Charlotte", country: "USA", capacity: 75000 },
+  { id: 11, name: "Estadio Azteca", city: "Mexico City", country: "Mexico", capacity: 87000 },
+  { id: 12, name: "Estadio BBVA", city: "Monterrey", country: "Mexico", capacity: 51000 },
+  { id: 13, name: "Estadio Akron", city: "Guadalajara", country: "Mexico", capacity: 46000 },
+  { id: 14, name: "BMO Field", city: "Toronto", country: "Canada", capacity: 45000 },
+  { id: 15, name: "BC Place", city: "Vancouver", country: "Canada", capacity: 54000 },
+  { id: 16, name: "Commonwealth Stadium", city: "Edmonton", country: "Canada", capacity: 56000 },
+];
 
 export default function WorldCup() {
   const [selectedGroup, setSelectedGroup] = useState<string>("All");
@@ -39,26 +58,6 @@ export default function WorldCup() {
     : matches.filter(m => m.group === selectedGroup);
 
   const groupOptions = ["All", ...groups.map(g => g.name)];
-
-  // Mock venues data (since it's not in the API yet)
-  const venues = [
-    { id: 1, name: "MetLife Stadium", city: "East Rutherford", country: "USA", capacity: 82500 },
-    { id: 2, name: "AT&T Stadium", city: "Arlington", country: "USA", capacity: 80000 },
-    { id: 3, name: "SoFi Stadium", city: "Inglewood", country: "USA", capacity: 70000 },
-    { id: 4, name: "Lumen Field", city: "Seattle", country: "USA", capacity: 68000 },
-    { id: 5, name: "Arrowhead Stadium", city: "Kansas City", country: "USA", capacity: 76000 },
-    { id: 6, name: "Hard Rock Stadium", city: "Miami Gardens", country: "USA", capacity: 65000 },
-    { id: 7, name: "NRG Stadium", city: "Houston", country: "USA", capacity: 72000 },
-    { id: 8, name: "Lincoln Financial Field", city: "Philadelphia", country: "USA", capacity: 69000 },
-    { id: 9, name: "Levi's Stadium", city: "Santa Clara", country: "USA", capacity: 68000 },
-    { id: 10, name: "Bank of America Stadium", city: "Charlotte", country: "USA", capacity: 75000 },
-    { id: 11, name: "Estadio Azteca", city: "Mexico City", country: "Mexico", capacity: 87000 },
-    { id: 12, name: "Estadio BBVA", city: "Monterrey", country: "Mexico", capacity: 51000 },
-    { id: 13, name: "Estadio Akron", city: "Guadalajara", country: "Mexico", capacity: 46000 },
-    { id: 14, name: "BMO Field", city: "Toronto", country: "Canada", capacity: 45000 },
-    { id: 15, name: "BC Place", city: "Vancouver", country: "Canada", capacity: 54000 },
-    { id: 16, name: "Commonwealth Stadium", city: "Edmonton", country: "Canada", capacity: 56000 },
-  ];
 
   if (loading) {
     return (
@@ -159,7 +158,7 @@ export default function WorldCup() {
         {/* Venues Tab */}
         <TabsContent value="venues" className="mt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {venues.map((venue) => (
+            {VENUES.map((venue) => (
               <VenueCard key={venue.id} venue={venue} />
             ))}
           </div>

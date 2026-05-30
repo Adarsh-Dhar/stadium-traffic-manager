@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Trophy, Zap, Activity, Play, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -9,10 +9,19 @@ interface LayoutProps {
 
 export function Layout({ children }: LayoutProps) {
   const [location] = useLocation();
+  const [time, setTime] = useState(() => new Date().toISOString().split('T')[1].slice(0, -1));
 
   // Force dark mode
   useEffect(() => {
     document.documentElement.classList.add("dark");
+  }, []);
+
+  // Update timestamp every second
+  useEffect(() => {
+    const id = setInterval(() => {
+      setTime(new Date().toISOString().split('T')[1].slice(0, -1));
+    }, 1000);
+    return () => clearInterval(id);
   }, []);
 
   const navItems = [
@@ -72,7 +81,7 @@ export function Layout({ children }: LayoutProps) {
 
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         {/* CRT Scanline effect overlay */}
-        <div className="pointer-events-none absolute inset-0 z-50 opacity-[0.015] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%]"></div>
+        <div className="pointer-events-none absolute inset-0 z-50 opacity-[0.015] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-size-[100%_4px,3px_100%]"></div>
         <div className="pointer-events-none absolute inset-0 z-50 opacity-10 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.4)_100%)]"></div>
         
         <header className="h-16 shrink-0 border-b border-border bg-card/50 backdrop-blur flex items-center px-6 justify-between z-10">
@@ -85,7 +94,7 @@ export function Layout({ children }: LayoutProps) {
           <div className="flex items-center gap-4 text-xs font-mono text-muted-foreground">
             <div className="flex items-center gap-2">
               <span>TS:</span>
-              <span className="text-foreground">{new Date().toISOString().split('T')[1].slice(0, -1)}</span>
+              <span className="text-foreground">{time}</span>
             </div>
           </div>
         </header>
