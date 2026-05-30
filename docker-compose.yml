@@ -16,7 +16,7 @@ services:
     command: >
       sh -c "redis-server --daemonize yes &&
              sleep 1 &&
-             redis-cli SET tickets_scanned 4200 &&
+             redis-cli SET tickets_scanned 0 &&
              redis-cli shutdown &&
              redis-server"
     # Handle Docker layer cache issues

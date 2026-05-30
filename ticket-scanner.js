@@ -249,7 +249,6 @@ async function performScan(ticketId, gate, isDuplicate, isInvalid) {
     if (res.status === 200 && res.body?.success) {
       recordScan(gate.id);
       scanned.add(ticketId);
-      await incrRedis();
     } else {
       stats.totalRejected++;
     }
