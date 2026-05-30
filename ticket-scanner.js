@@ -89,19 +89,19 @@ const GATE_PROFILES = [
 // Each phase has a base rate, a peak multiplier, and gaussian noise sigma.
 const ARRIVAL_PHASES = [
   //  name                       start   dur   rateBase ratePeak  sigma  dupRate invalidRate
-  { name: 'Gates open (−3h)',    -180,   30,   25,      60,       8,     0.001,  0.002 },
-  { name: 'Early arrivals (−2h)',-150,   30,   80,      150,      18,    0.002,  0.003 },
-  { name: 'Steady stream (−90m)',-120,   20,   180,     280,      30,    0.003,  0.002 },
-  { name: 'Mid-wave (−70m)',      -100,  15,   320,     480,      45,    0.004,  0.002 },
-  { name: 'Peak wave (−55m)',     -85,   12,   550,     820,      65,    0.005,  0.003 },
-  { name: 'Rush hour (−43m)',     -73,   10,   780,     1050,     80,    0.006,  0.003 },
-  { name: 'Kickoff crunch (−33m)',-63,    8,   950,     1300,     90,    0.007,  0.004 },
-  { name: 'Final surge (−25m)',   -55,    6,   820,     1100,     75,    0.008,  0.004 },
-  { name: 'Pre-kickoff (−19m)',   -49,    6,   580,     780,      60,    0.007,  0.003 },
-  { name: 'Kickoff stragglers',   -43,    8,   220,     360,      40,    0.005,  0.002 },
-  { name: 'Late (in-play)',       -35,   12,   80,      140,      20,    0.003,  0.002 },
-  { name: 'Half-time bump',        10,    8,   90,      160,      22,    0.003,  0.001 },
-  { name: 'Settling (post-HT)',    18,   12,   40,      70,       12,    0.001,  0.001 },
+  { name: 'Gates open (-3h)',    start: -180, durationMin: 30, rateBase: 25, ratePeak: 60, sigma: 8, dupRate: 0.001, invalidRate: 0.002 },
+  { name: 'Early arrivals (-2h)', start: -150, durationMin: 30, rateBase: 80, ratePeak: 150, sigma: 18, dupRate: 0.002, invalidRate: 0.003 },
+  { name: 'Steady stream (-90m)', start: -120, durationMin: 20, rateBase: 180, ratePeak: 280, sigma: 30, dupRate: 0.003, invalidRate: 0.002 },
+  { name: 'Mid-wave (-70m)',      start: -100, durationMin: 15, rateBase: 320, ratePeak: 480, sigma: 45, dupRate: 0.004, invalidRate: 0.002 },
+  { name: 'Peak wave (-55m)',     start: -85, durationMin: 12, rateBase: 550, ratePeak: 820, sigma: 65, dupRate: 0.005, invalidRate: 0.003 },
+  { name: 'Rush hour (-43m)',     start: -73, durationMin: 10, rateBase: 780, ratePeak: 1050, sigma: 80, dupRate: 0.006, invalidRate: 0.003 },
+  { name: 'Kickoff crunch (-33m)', start: -63, durationMin: 8, rateBase: 950, ratePeak: 1300, sigma: 90, dupRate: 0.007, invalidRate: 0.004 },
+  { name: 'Final surge (-25m)',   start: -55, durationMin: 6, rateBase: 820, ratePeak: 1100, sigma: 75, dupRate: 0.008, invalidRate: 0.004 },
+  { name: 'Pre-kickoff (-19m)',   start: -49, durationMin: 6, rateBase: 580, ratePeak: 780, sigma: 60, dupRate: 0.007, invalidRate: 0.003 },
+  { name: 'Kickoff stragglers',   start: -43, durationMin: 8, rateBase: 220, ratePeak: 360, sigma: 40, dupRate: 0.005, invalidRate: 0.002 },
+  { name: 'Late (in-play)',       start: -35, durationMin: 12, rateBase: 80, ratePeak: 140, sigma: 20, dupRate: 0.003, invalidRate: 0.002 },
+  { name: 'Half-time bump',        start: 10, durationMin: 8, rateBase: 90, ratePeak: 160, sigma: 22, dupRate: 0.003, invalidRate: 0.001 },
+  { name: 'Settling (post-HT)',    start: 18, durationMin: 12, rateBase: 40, ratePeak: 70, sigma: 12, dupRate: 0.001, invalidRate: 0.001 },
 ];
 
 // ── Ticket pool (mirrors Postgres seed) ───────────────────────────────────
